@@ -17,6 +17,8 @@ export interface DeckSession {
 	tmuxName?: string;
 	managed?: boolean;
 	attached?: boolean;
+	// set when deck created this session inside a git worktree
+	worktree?: { repo: string; branch: string; createdBranch: boolean };
 }
 
 export interface Project {

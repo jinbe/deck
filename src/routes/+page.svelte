@@ -39,11 +39,33 @@
 			.sort((a, b) => b.sessions[0].lastActiveAt - a.sessions[0].lastActiveAt);
 	});
 
-	async function remove(session: DeckSession, e: Event) {
+	let delTarget = $state<DeckSession | null>(null);
+	let delWorktree = $state(true);
+	let delBranch = $state(true);
+
+	function remove(session: DeckSession, e: Event) {
 		e.preventDefault();
 		e.stopPropagation();
+		if (session.worktree) {
+			delWorktree = true;
+			delBranch = session.worktree.createdBranch;
+			delTarget = session;
+			return;
+		}
 		if (!confirm(`Kill and remove "${session.title}"?`)) return;
-		await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, { method: 'DELETE' });
+		doDelete(session, {});
+	}
+
+	async function doDelete(
+		session: DeckSession,
+		opts: { deleteWorktree?: boolean; deleteBranch?: boolean }
+	) {
+		await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, {
+			method: 'DELETE',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(opts)
+		});
+		delTarget = null;
 		refresh();
 	}
 
@@ -144,3 +166,47 @@
 {/if}
 
 <NewSessionModal bind:open={modalOpen} />
+
+{#if delTarget}
+	<div class="modal modal-open" role="dialog">
+		<div class="modal-box max-w-sm">
+			<h3 class="mb-2 text-lg font-semibold">Remove "{delTarget.title}"</h3>
+			<p class="mb-3 text-sm opacity-70">
+				Kills the session. This session lives in a git worktree on branch
+				<span class="font-mono">{delTarget.worktree?.branch}</span>.
+			</p>
+			<div class="space-y-2">
+				<label class="label cursor-pointer justify-start gap-2">
+					<input type="checkbox" class="checkbox checkbox-sm" bind:checked={delWorktree} />
+					<span>Delete the worktree</span>
+				</label>
+				<label class="label cursor-pointer justify-start gap-2">
+					<input
+						type="checkbox"
+						class="checkbox checkbox-sm"
+						bind:checked={delBranch}
+						disabled={!delWorktree || !delTarget.worktree?.createdBranch}
+					/>
+					<span>
+						Delete the branch
+						{#if !delTarget.worktree?.createdBranch}
+							<span class="opacity-50">(existing branch, kept)</span>
+						{/if}
+					</span>
+				</label>
+			</div>
+			<div class="modal-action">
+				<button class="btn" onclick={() => (delTarget = null)}>Cancel</button>
+				<button
+					class="btn btn-error"
+					onclick={() =>
+						delTarget &&
+						doDelete(delTarget, { deleteWorktree: delWorktree, deleteBranch: delBranch })}
+				>
+					Remove
+				</button>
+			</div>
+		</div>
+		<button class="modal-backdrop" onclick={() => (delTarget = null)} aria-label="close"></button>
+	</div>
+{/if}

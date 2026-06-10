@@ -50,3 +50,19 @@ export async function createWorktree(
 	await git(repo, ...args);
 	return dir;
 }
+
+export async function removeWorktree(
+	repo: string,
+	worktreeDir: string,
+	opts: { deleteBranch?: boolean; branch?: string } = {}
+) {
+	// --force: drop the worktree even with uncommitted changes (user opted in)
+	await git(repo, 'worktree', 'remove', '--force', worktreeDir);
+	if (opts.deleteBranch && opts.branch) {
+		try {
+			await git(repo, 'branch', '-D', opts.branch);
+		} catch {
+			// branch may be checked out elsewhere or already gone — non-fatal
+		}
+	}
+}

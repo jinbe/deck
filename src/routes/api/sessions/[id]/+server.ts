@@ -8,7 +8,16 @@ export const GET: RequestHandler = async ({ params }) => {
 	return json(session);
 };
 
-export const DELETE: RequestHandler = async ({ params }) => {
-	await deleteSession(params.id);
+export const DELETE: RequestHandler = async ({ params, request, url }) => {
+	let opts: { deleteWorktree?: boolean; deleteBranch?: boolean } = {};
+	try {
+		opts = await request.json();
+	} catch {
+		opts = {
+			deleteWorktree: url.searchParams.get('worktree') === '1',
+			deleteBranch: url.searchParams.get('branch') === '1'
+		};
+	}
+	await deleteSession(params.id, opts);
 	return json({ ok: true });
 };

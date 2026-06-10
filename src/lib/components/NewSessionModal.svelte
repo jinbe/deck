@@ -14,6 +14,7 @@
 	let yolo = $state(true);
 	let useWorktree = $state(false);
 	let branch = $state('');
+	let branchDirty = $state(false);
 	let newBranch = $state(true);
 	let base = $state('');
 	let branches = $state<string[]>([]);
@@ -28,6 +29,7 @@
 	$effect(() => {
 		if (open) {
 			promptDirty = false;
+			branchDirty = false;
 			fetch('/api/projects')
 				.then((r) => r.json())
 				.then((p: Project[]) => {
@@ -44,6 +46,11 @@
 	$effect(() => {
 		const template = selectedProject?.template ?? '';
 		if (!promptDirty) prompt = template;
+	});
+
+	// Branch defaults to the title until the user edits it.
+	$effect(() => {
+		if (useWorktree && !branchDirty) branch = title.trim();
 	});
 
 	$effect(() => {
@@ -78,6 +85,10 @@
 
 	async function create() {
 		errorMsg = '';
+		if (!title.trim()) {
+			errorMsg = 'title is required';
+			return;
+		}
 		if (!effectiveCwd) {
 			errorMsg = 'pick a project or path';
 			return;
@@ -90,7 +101,7 @@
 				body: JSON.stringify({
 					kind,
 					cwd: effectiveCwd,
-					title: title.trim() || undefined,
+					title: title.trim(),
 					model: model || undefined,
 					permissionMode: kind === 'claude' ? (yolo ? 'bypassPermissions' : 'acceptEdits') : undefined,
 					command: kind === 'shell' && command.trim() ? command.trim() : undefined,
@@ -169,7 +180,11 @@
 
 			<fieldset class="fieldset">
 				<legend class="fieldset-legend">Title</legend>
-				<input class="input w-full" placeholder="optional" bind:value={title} />
+				<input
+					class="input w-full {!title.trim() ? 'input-error' : ''}"
+					placeholder="required"
+					bind:value={title}
+				/>
 			</fieldset>
 
 			<fieldset class="fieldset">
@@ -179,7 +194,12 @@
 					<span>Create session in a git worktree</span>
 				</label>
 				{#if useWorktree}
-					<input class="input w-full" placeholder="branch name" bind:value={branch} />
+					<input
+						class="input w-full"
+						placeholder="branch name (defaults to title)"
+						bind:value={branch}
+						oninput={() => (branchDirty = true)}
+					/>
 					<label class="label cursor-pointer justify-start gap-2">
 						<input type="checkbox" class="checkbox checkbox-sm" bind:checked={newBranch} />
 						<span>New branch</span>
@@ -236,7 +256,7 @@
 
 			<div class="modal-action">
 				<button class="btn" onclick={() => (open = false)}>Cancel</button>
-				<button class="btn btn-primary" onclick={create} disabled={busy}>
+				<button class="btn btn-primary" onclick={create} disabled={busy || !title.trim()}>
 					{busy ? 'Creating...' : 'Create'}
 				</button>
 			</div>

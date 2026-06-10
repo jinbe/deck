@@ -17,12 +17,15 @@ export const POST: RequestHandler = async ({ request }) => {
 	if (!cwd || !fs.existsSync(cwd)) error(400, 'cwd does not exist');
 	if (kind !== 'claude' && kind !== 'shell') error(400, 'invalid kind');
 
+	let worktree: { repo: string; branch: string; createdBranch: boolean } | undefined;
 	if (body.worktree?.branch) {
 		if (!(await isGitRepo(cwd))) error(400, 'worktree requested but cwd is not a git repo');
-		cwd = await createWorktree(cwd, body.worktree.branch, {
+		const repo = cwd;
+		cwd = await createWorktree(repo, body.worktree.branch, {
 			newBranch: body.worktree.newBranch,
 			base: body.worktree.base || undefined
 		});
+		worktree = { repo, branch: body.worktree.branch, createdBranch: !!body.worktree.newBranch };
 	}
 
 	const session = await createSession({
@@ -31,7 +34,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		cwd,
 		model,
 		permissionMode,
-		command
+		command,
+		worktree
 	});
 
 	if (kind === 'claude' && typeof prompt === 'string' && prompt.trim()) {

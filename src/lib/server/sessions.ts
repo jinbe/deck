@@ -3,6 +3,7 @@ import type { DeckSession } from '$lib/types';
 import { listStoredSessions, getStoredSession, saveSession, removeSession } from './store';
 import { listTmuxSessions, createTmuxSession, killTmuxSession, hasTmuxSession } from './tmux';
 import { isTurnRunning, stopTurn } from './claude';
+import { removeWorktree } from './git';
 
 const nanoid = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 8);
 
@@ -75,6 +76,7 @@ export async function createSession(input: {
 	model?: string;
 	permissionMode?: DeckSession['permissionMode'];
 	command?: string;
+	worktree?: { repo: string; branch: string; createdBranch: boolean };
 }): Promise<DeckSession> {
 	const id = newId(input.kind);
 	const now = Date.now();
@@ -88,7 +90,8 @@ export async function createSession(input: {
 		createdAt: now,
 		lastActiveAt: now,
 		status: 'idle',
-		managed: true
+		managed: true,
+		worktree: input.worktree
 	};
 
 	if (input.kind === 'claude') {
@@ -103,7 +106,10 @@ export async function createSession(input: {
 	return session;
 }
 
-export async function deleteSession(id: string): Promise<void> {
+export async function deleteSession(
+	id: string,
+	opts: { deleteWorktree?: boolean; deleteBranch?: boolean } = {}
+): Promise<void> {
 	if (id.startsWith('t_')) {
 		await killTmuxSession(id.slice(2));
 		return;
@@ -114,6 +120,18 @@ export async function deleteSession(id: string): Promise<void> {
 	} else if (stored?.tmuxName && (await hasTmuxSession(stored.tmuxName))) {
 		await killTmuxSession(stored.tmuxName);
 	}
+
+	if (opts.deleteWorktree && stored?.worktree) {
+		try {
+			await removeWorktree(stored.worktree.repo, stored.cwd, {
+				deleteBranch: opts.deleteBranch && stored.worktree.createdBranch,
+				branch: stored.worktree.branch
+			});
+		} catch {
+			// leave the stored session removed even if worktree cleanup fails
+		}
+	}
+
 	removeSession(id);
 }
 
