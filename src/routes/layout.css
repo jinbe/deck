@@ -1,0 +1,66 @@
+@import 'tailwindcss';
+
+@plugin 'daisyui' {
+	themes:
+		light --default,
+		dark --prefersdark;
+}
+
+@plugin 'daisyui/theme' {
+	name: 'eink';
+	default: false;
+	prefersdark: false;
+	color-scheme: light;
+
+	--color-base-100: oklch(100% 0 0);
+	--color-base-200: oklch(97% 0 0);
+	--color-base-300: oklch(91% 0 0);
+	--color-base-content: oklch(0% 0 0);
+	--color-primary: oklch(0% 0 0);
+	--color-primary-content: oklch(100% 0 0);
+	--color-secondary: oklch(25% 0 0);
+	--color-secondary-content: oklch(100% 0 0);
+	--color-accent: oklch(0% 0 0);
+	--color-accent-content: oklch(100% 0 0);
+	--color-neutral: oklch(0% 0 0);
+	--color-neutral-content: oklch(100% 0 0);
+	--color-info: oklch(35% 0 0);
+	--color-info-content: oklch(100% 0 0);
+	--color-success: oklch(25% 0 0);
+	--color-success-content: oklch(100% 0 0);
+	--color-warning: oklch(45% 0 0);
+	--color-warning-content: oklch(100% 0 0);
+	--color-error: oklch(15% 0 0);
+	--color-error-content: oklch(100% 0 0);
+
+	--radius-selector: 0rem;
+	--radius-field: 0rem;
+	--radius-box: 0rem;
+	--size-selector: 0.25rem;
+	--size-field: 0.25rem;
+	--border: 1.5px;
+	--depth: 0;
+	--noise: 0;
+}
+
+/* e-ink: kill all motion and shadows */
+[data-theme='eink'] *,
+[data-theme='eink'] *::before,
+[data-theme='eink'] *::after {
+	animation: none !important;
+	transition: none !important;
+	box-shadow: none !important;
+	text-shadow: none !important;
+}
+
+[data-theme='eink'] {
+	scroll-behavior: auto;
+}
+
+.terminal-output {
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: 0.8rem;
+	line-height: 1.35;
+	white-space: pre-wrap;
+	word-break: break-all;
+}
