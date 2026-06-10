@@ -22,4 +22,5 @@ export interface DeckSession {
 export interface Project {
 	name: string;
 	path: string;
+	template?: string;
 }

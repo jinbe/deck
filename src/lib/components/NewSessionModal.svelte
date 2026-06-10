@@ -18,13 +18,16 @@
 	let base = $state('');
 	let branches = $state<string[]>([]);
 	let prompt = $state('');
+	let promptDirty = $state(false);
 	let command = $state('');
 	let newProjectPath = $state('');
+	let newProjectTemplate = $state('');
 	let busy = $state(false);
 	let errorMsg = $state('');
 
 	$effect(() => {
 		if (open) {
+			promptDirty = false;
 			fetch('/api/projects')
 				.then((r) => r.json())
 				.then((p: Project[]) => {
@@ -35,6 +38,13 @@
 	});
 
 	const effectiveCwd = $derived(cwd === '__custom' ? customCwd : cwd);
+	const selectedProject = $derived(projects.find((p) => p.path === cwd));
+
+	// Prefill the first prompt from the project's template until the user edits it.
+	$effect(() => {
+		const template = selectedProject?.template ?? '';
+		if (!promptDirty) prompt = template;
+	});
 
 	$effect(() => {
 		if (useWorktree && effectiveCwd) {
@@ -49,13 +59,18 @@
 		const res = await fetch('/api/projects', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ path: newProjectPath.trim() })
+			body: JSON.stringify({
+				path: newProjectPath.trim(),
+				template: newProjectTemplate.trim() || undefined
+			})
 		});
 		if (res.ok) {
-			const p = await res.json();
-			projects = [...projects, p];
+			const p: Project = await res.json();
+			projects = [...projects.filter((x) => x.path !== p.path), p];
 			cwd = p.path;
+			promptDirty = false;
 			newProjectPath = '';
+			newProjectTemplate = '';
 		} else {
 			errorMsg = (await res.json()).message ?? 'failed to add project';
 		}
@@ -141,6 +156,14 @@
 					/>
 					<button class="btn join-item btn-sm" onclick={addProject}>Add</button>
 				</div>
+				{#if newProjectPath.trim()}
+					<textarea
+						class="textarea textarea-sm w-full"
+						rows="2"
+						placeholder="template first prompt for this project (optional)"
+						bind:value={newProjectTemplate}
+					></textarea>
+				{/if}
 			</fieldset>
 
 			<fieldset class="fieldset">
@@ -189,7 +212,11 @@
 						rows="3"
 						placeholder="first prompt (optional, starts immediately)"
 						bind:value={prompt}
+						oninput={() => (promptDirty = true)}
 					></textarea>
+					{#if selectedProject?.template && !promptDirty}
+						<p class="text-xs opacity-50">prefilled from {selectedProject.name} template</p>
+					{/if}
 				</fieldset>
 			{:else}
 				<fieldset class="fieldset">

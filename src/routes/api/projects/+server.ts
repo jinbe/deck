@@ -14,7 +14,11 @@ export const POST: RequestHandler = async ({ request }) => {
 	if (!dir || !fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
 		error(400, 'path is not a directory');
 	}
-	const project = { name: String(body.name ?? '').trim() || path.basename(dir), path: dir };
+	const project = {
+		name: String(body.name ?? '').trim() || path.basename(dir),
+		path: dir,
+		template: String(body.template ?? '').trim() || undefined
+	};
 	addProject(project);
 	return json(project, { status: 201 });
 };

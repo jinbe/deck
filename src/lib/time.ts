@@ -13,3 +13,23 @@ export function relativeTime(ts: number): string {
 export function shortPath(p: string): string {
 	return p.replace(/^\/Users\/[^/]+/, '~');
 }
+
+import type { Project } from '$lib/types';
+
+// Map a session cwd to a group: worktrees fold back under their repo, then we
+// match the longest registered project path; otherwise the repo/cwd itself.
+export function deriveGroup(
+	cwd: string,
+	projects: Project[]
+): { key: string; label: string } {
+	const wt = cwd.indexOf('-worktrees/');
+	const base = wt >= 0 ? cwd.slice(0, wt) : cwd;
+
+	let best: Project | undefined;
+	for (const p of projects) {
+		const matches = base === p.path || base.startsWith(p.path + '/') || cwd.startsWith(p.path + '/');
+		if (matches && (!best || p.path.length > best.path.length)) best = p;
+	}
+	if (best) return { key: best.path, label: best.name };
+	return { key: base, label: shortPath(base) };
+}
