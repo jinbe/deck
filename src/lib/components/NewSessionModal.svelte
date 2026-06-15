@@ -12,7 +12,7 @@
 	let title = $state('');
 	let model = $state('');
 	let yolo = $state(true);
-	let useWorktree = $state(false);
+	let useWorktree = $state(true);
 	let branch = $state('');
 	let branchDirty = $state(false);
 	let newBranch = $state(true);

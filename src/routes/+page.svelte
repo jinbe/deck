@@ -2,7 +2,7 @@
 	import type { DeckSession, Project } from '$lib/types';
 	import { relativeTime, shortPath, deriveGroup } from '$lib/time';
 	import NewSessionModal from '$lib/components/NewSessionModal.svelte';
-	import { Bot, Terminal, Plus, Trash2, RefreshCw, FolderGit2, List } from '@lucide/svelte';
+	import { Bot, Terminal, Plus, Trash2, RefreshCw, FolderGit2, List, FolderCog } from '@lucide/svelte';
 
 	let sessions = $state<DeckSession[]>([]);
 	let projects = $state<Project[]>([]);
@@ -97,6 +97,9 @@
 		{#if grouped}<FolderGit2 size={16} />{:else}<List size={16} />{/if}
 	</button>
 	<div class="flex-1"></div>
+	<a href="/projects" class="btn btn-ghost btn-sm" aria-label="Manage projects" title="Projects">
+		<FolderCog size={16} />
+	</a>
 	<button class="btn btn-ghost btn-sm" onclick={refresh} aria-label="Refresh">
 		<RefreshCw size={16} />
 	</button>
