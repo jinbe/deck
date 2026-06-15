@@ -42,10 +42,12 @@
 	let delTarget = $state<DeckSession | null>(null);
 	let delWorktree = $state(true);
 	let delBranch = $state(true);
+	let deletingId = $state<string | null>(null);
 
 	function remove(session: DeckSession, e: Event) {
 		e.preventDefault();
 		e.stopPropagation();
+		if (deletingId) return;
 		if (session.worktree) {
 			delWorktree = true;
 			delBranch = session.worktree.createdBranch;
@@ -60,13 +62,19 @@
 		session: DeckSession,
 		opts: { deleteWorktree?: boolean; deleteBranch?: boolean }
 	) {
-		await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, {
-			method: 'DELETE',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify(opts)
-		});
-		delTarget = null;
-		refresh();
+		if (deletingId) return;
+		deletingId = session.id;
+		try {
+			await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, {
+				method: 'DELETE',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(opts)
+			});
+			delTarget = null;
+			await refresh();
+		} finally {
+			deletingId = null;
+		}
 	}
 
 	function statusClass(s: DeckSession) {
@@ -130,8 +138,17 @@
 		{/if}
 		<span class="badge badge-sm {statusClass(s)}">{s.status}</span>
 		<span class="w-10 text-right text-xs tabular-nums opacity-60">{relativeTime(s.lastActiveAt)}</span>
-		<button class="btn btn-ghost btn-xs" onclick={(e) => remove(s, e)} aria-label="Remove session">
-			<Trash2 size={14} />
+		<button
+			class="btn btn-ghost btn-xs"
+			onclick={(e) => remove(s, e)}
+			disabled={deletingId === s.id}
+			aria-label="Remove session"
+		>
+			{#if deletingId === s.id}
+				<span class="loading loading-spinner loading-xs"></span>
+			{:else}
+				<Trash2 size={14} />
+			{/if}
 		</button>
 	</a>
 {/snippet}
@@ -199,17 +216,26 @@
 				</label>
 			</div>
 			<div class="modal-action">
-				<button class="btn" onclick={() => (delTarget = null)}>Cancel</button>
+				<button class="btn" onclick={() => (delTarget = null)} disabled={!!deletingId}>Cancel</button>
 				<button
 					class="btn btn-error"
+					disabled={!!deletingId}
 					onclick={() =>
 						delTarget &&
 						doDelete(delTarget, { deleteWorktree: delWorktree, deleteBranch: delBranch })}
 				>
-					Remove
+					{#if deletingId}
+						<span class="loading loading-spinner loading-xs"></span> Removing...
+					{:else}
+						Remove
+					{/if}
 				</button>
 			</div>
 		</div>
-		<button class="modal-backdrop" onclick={() => (delTarget = null)} aria-label="close"></button>
+		<button
+			class="modal-backdrop"
+			onclick={() => !deletingId && (delTarget = null)}
+			aria-label="close"
+		></button>
 	</div>
 {/if}
