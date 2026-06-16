@@ -35,5 +35,8 @@ Dev: `npm run dev`.
 - Each active Claude session runs as one long-lived `claude --input-format stream-json` process. Assistant text streams in live; a message sent mid-turn is queued and runs next; **Interrupt** stops the current turn (via a control_request) without ending the session, so you can immediately redirect it. Idle processes are torn down after 20 min and respawned with `--resume` on the next message.
 - Permission modes: new Claude sessions default to YOLO (`--dangerously-skip-permissions`); untick for `acceptEdits`. Headless turns cannot answer permission prompts, so `default`/`plan` modes will stall on gated tools.
 - A server restart drops live processes (transcripts and resume state survive; the next message respawns and resumes).
+- Tool calls render structured: Bash shows the command + output (unified diffs in output are colorized), Edit/MultiEdit show a red/green line diff, Write shows its content as an added-line diff, TodoWrite shows the checklist, Read/Grep/Glob and others collapse their output. Each tool result is paired back to its call.
+- Image attachments: paste an image into the Claude composer, use the paperclip to pick files, or drag-and-drop onto the conversation. Images are sent as base64 blocks in the user message and shown inline in the transcript.
 - http(s) links in session output are clickable. The transcript view only auto-scrolls when you're already near the bottom; a jump-to-latest button appears otherwise.
+- The UI is mobile-friendly: no horizontal overflow at phone widths, button labels collapse to icons, and the conversation height uses `dvh` so the composer stays reachable.
 - State: `~/.deck/{sessions.json,projects.json,token,transcripts/}`.

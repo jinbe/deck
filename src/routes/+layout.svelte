@@ -28,7 +28,7 @@
 </svelte:head>
 
 <div class="flex min-h-screen flex-col bg-base-200">
-	<header class="navbar min-h-12 border-b border-base-300 bg-base-100 px-4">
+	<header class="navbar min-h-12 border-b border-base-300 bg-base-100 px-3 sm:px-4">
 		<div class="flex-1">
 			<a href="/" class="flex items-center gap-2 text-lg font-semibold">
 				<LayoutGrid size={20} />
@@ -50,7 +50,7 @@
 		</div>
 	</header>
 
-	<main class="mx-auto w-full max-w-5xl flex-1 p-4">
+	<main class="mx-auto w-full max-w-5xl flex-1 p-3 sm:p-4">
 		{@render children()}
 	</main>
 </div>

@@ -1,7 +1,8 @@
 <script lang="ts">
 	import type { DeckSession } from '$lib/types';
 	import Linked from './Linked.svelte';
-	import { Send, Square, Wrench, ChevronDown, ArrowDown } from '@lucide/svelte';
+	import ToolCall from './ToolCall.svelte';
+	import { Send, Square, ChevronDown, ArrowDown, Paperclip, X } from '@lucide/svelte';
 
 	let { session }: { session: DeckSession } = $props();
 
@@ -12,7 +13,26 @@
 	let liveText = $state('');
 	let input = $state('');
 	let scroller: HTMLDivElement | undefined = $state();
+	let fileInput: HTMLInputElement | undefined = $state();
 	let atBottom = $state(true);
+	let dragging = $state(false);
+
+	type Attachment = { media_type: string; data: string; url: string };
+	let attachments = $state<Attachment[]>([]);
+
+	// Pair tool_result blocks back to their originating tool_use by id.
+	const resultsById = $derived.by(() => {
+		const m = new Map<string, AnyEvent>();
+		for (const ev of events) {
+			if (ev.type !== 'user') continue;
+			const content = ev.message?.content;
+			if (!Array.isArray(content)) continue;
+			for (const b of content) {
+				if (b.type === 'tool_result' && b.tool_use_id) m.set(b.tool_use_id, b);
+			}
+		}
+		return m;
+	});
 
 	$effect(() => {
 		const source = new EventSource(`/api/sessions/${encodeURIComponent(session.id)}/events`);
@@ -57,15 +77,63 @@
 		atBottom = true;
 	}
 
+	function toBase64(buf: ArrayBuffer): string {
+		let bin = '';
+		const bytes = new Uint8Array(buf);
+		const chunk = 0x8000;
+		for (let i = 0; i < bytes.length; i += chunk) {
+			bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+		}
+		return btoa(bin);
+	}
+
+	async function addFile(file: File) {
+		if (!file.type.startsWith('image/')) return;
+		const data = toBase64(await file.arrayBuffer());
+		attachments = [...attachments, { media_type: file.type, data, url: `data:${file.type};base64,${data}` }];
+	}
+
+	function onPaste(e: ClipboardEvent) {
+		const items = e.clipboardData?.items;
+		if (!items) return;
+		for (const it of items) {
+			if (it.kind === 'file' && it.type.startsWith('image/')) {
+				const f = it.getAsFile();
+				if (f) addFile(f);
+			}
+		}
+	}
+
+	function onDrop(e: DragEvent) {
+		e.preventDefault();
+		dragging = false;
+		const files = e.dataTransfer?.files;
+		if (files) for (const f of files) addFile(f);
+	}
+
+	function onPick(e: Event) {
+		const files = (e.target as HTMLInputElement).files;
+		if (files) for (const f of files) addFile(f);
+		(e.target as HTMLInputElement).value = '';
+	}
+
+	function removeAttachment(i: number) {
+		attachments = attachments.filter((_, k) => k !== i);
+	}
+
+	const canSend = $derived(!!input.trim() || attachments.length > 0);
+
 	async function send() {
+		if (!canSend) return;
 		const text = input.trim();
-		if (!text) return;
+		const images = attachments.map((a) => ({ media_type: a.media_type, data: a.data }));
 		input = '';
+		attachments = [];
 		atBottom = true;
 		await fetch(`/api/sessions/${encodeURIComponent(session.id)}/send`, {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ text })
+			body: JSON.stringify({ text, images: images.length ? images : undefined })
 		});
 	}
 
@@ -89,17 +157,6 @@
 		return Array.isArray(content) ? content : [];
 	}
 
-	function toolResultText(block: AnyEvent): string {
-		if (typeof block.content === 'string') return block.content;
-		if (Array.isArray(block.content)) {
-			return block.content
-				.filter((c: AnyEvent) => c.type === 'text')
-				.map((c: AnyEvent) => c.text)
-				.join('\n');
-		}
-		return JSON.stringify(block.content ?? '', null, 2);
-	}
-
 	function fmtCost(event: AnyEvent): string {
 		const parts: string[] = [];
 		if (typeof event.duration_ms === 'number') parts.push(`${(event.duration_ms / 1000).toFixed(1)}s`);
@@ -110,7 +167,16 @@
 	}
 </script>
 
-<div class="relative flex h-full min-h-0 flex-col">
+<div
+	class="relative flex h-full min-h-0 flex-col"
+	role="group"
+	ondragover={(e) => {
+		e.preventDefault();
+		dragging = true;
+	}}
+	ondragleave={() => (dragging = false)}
+	ondrop={onDrop}
+>
 	<div
 		bind:this={scroller}
 		onscroll={onScroll}
@@ -119,15 +185,28 @@
 		{#each events as event, i (i)}
 			{#if event.type === 'deck.user'}
 				<div class="chat chat-end">
-					<div class="chat-bubble chat-bubble-primary whitespace-pre-wrap"><Linked text={event.text} /></div>
+					<div class="chat-bubble chat-bubble-primary max-w-[85%] break-words whitespace-pre-wrap">
+						{#if event.images?.length}
+							<div class="mb-2 flex flex-wrap gap-2">
+								{#each event.images as img, k (k)}
+									<img
+										src={`data:${img.media_type};base64,${img.data}`}
+										alt="attachment"
+										class="max-h-40 rounded-box border border-base-300"
+									/>
+								{/each}
+							</div>
+						{/if}
+						{#if event.text}<Linked text={event.text} />{/if}
+					</div>
 				</div>
 			{:else if event.type === 'deck.error'}
-				<div class="alert alert-error py-2 text-sm whitespace-pre-wrap">{event.text}</div>
+				<div class="alert alert-error py-2 text-sm break-words whitespace-pre-wrap">{event.text}</div>
 			{:else if event.type === 'assistant'}
 				{#each contentBlocks(event) as block, j (j)}
 					{#if block.type === 'text' && block.text?.trim()}
 						<div class="chat chat-start">
-							<div class="chat-bubble whitespace-pre-wrap bg-base-100 text-base-content">
+							<div class="chat-bubble max-w-[85%] break-words whitespace-pre-wrap bg-base-100 text-base-content">
 								<Linked text={block.text} />
 							</div>
 						</div>
@@ -136,37 +215,10 @@
 							<summary class="cursor-pointer select-none">
 								<ChevronDown size={12} class="inline" /> thinking
 							</summary>
-							<pre class="whitespace-pre-wrap pt-1">{block.thinking}</pre>
+							<pre class="break-words whitespace-pre-wrap pt-1">{block.thinking}</pre>
 						</details>
 					{:else if block.type === 'tool_use'}
-						<details class="mx-2 rounded-box border border-base-300 bg-base-100 px-3 py-1.5 text-sm">
-							<summary class="cursor-pointer select-none">
-								<Wrench size={13} class="inline opacity-60" />
-								<span class="font-medium">{block.name}</span>
-								<span class="opacity-50">
-									{(block.input?.description ?? block.input?.command ?? block.input?.file_path ?? '')
-										.toString()
-										.slice(0, 80)}
-								</span>
-							</summary>
-							<pre class="terminal-output max-h-60 overflow-y-auto pt-2 opacity-80">{JSON.stringify(
-									block.input,
-									null,
-									2
-								)}</pre>
-						</details>
-					{/if}
-				{/each}
-			{:else if event.type === 'user'}
-				{#each contentBlocks(event) as block, j (j)}
-					{#if block.type === 'tool_result'}
-						<details class="mx-2 px-3 text-xs opacity-60">
-							<summary class="cursor-pointer select-none">tool result</summary>
-							<pre class="terminal-output max-h-60 overflow-y-auto pt-1">{toolResultText(block).slice(
-									0,
-									4000
-								)}</pre>
-						</details>
+						<ToolCall {block} result={resultsById.get(block.id)} />
 					{/if}
 				{/each}
 			{:else if event.type === 'result'}
@@ -176,7 +228,7 @@
 
 		{#if liveText.trim()}
 			<div class="chat chat-start">
-				<div class="chat-bubble whitespace-pre-wrap bg-base-100 text-base-content">
+				<div class="chat-bubble max-w-[85%] break-words whitespace-pre-wrap bg-base-100 text-base-content">
 					<Linked text={liveText} />
 				</div>
 			</div>
@@ -184,6 +236,12 @@
 			<div class="px-2 text-sm opacity-60">working...</div>
 		{/if}
 	</div>
+
+	{#if dragging}
+		<div class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-box border-2 border-dashed border-primary bg-base-100/70 text-sm font-medium">
+			Drop images to attach
+		</div>
+	{/if}
 
 	{#if !atBottom}
 		<button
@@ -195,24 +253,57 @@
 		</button>
 	{/if}
 
-	<div class="border-t border-base-300 bg-base-100 p-3">
-		<div class="flex items-end gap-2">
+	<div class="border-t border-base-300 bg-base-100 p-2 sm:p-3">
+		{#if attachments.length}
+			<div class="mb-2 flex flex-wrap gap-2">
+				{#each attachments as a, i (i)}
+					<div class="relative">
+						<img src={a.url} alt="attachment" class="h-16 w-16 rounded-box border border-base-300 object-cover" />
+						<button
+							class="btn btn-circle btn-xs absolute -top-2 -right-2"
+							onclick={() => removeAttachment(i)}
+							aria-label="Remove attachment"
+						>
+							<X size={12} />
+						</button>
+					</div>
+				{/each}
+			</div>
+		{/if}
+		<div class="flex items-end gap-1.5 sm:gap-2">
+			<input
+				bind:this={fileInput}
+				type="file"
+				accept="image/*"
+				multiple
+				class="hidden"
+				onchange={onPick}
+			/>
+			<button
+				class="btn btn-ghost btn-square"
+				onclick={() => fileInput?.click()}
+				aria-label="Attach image"
+				title="Attach image"
+			>
+				<Paperclip size={16} />
+			</button>
 			<textarea
 				class="textarea min-h-12 flex-1"
 				rows="2"
 				placeholder={status === 'running'
 					? 'queue a follow-up (ctrl/cmd+enter)'
-					: 'message (ctrl/cmd+enter to send)'}
+					: 'message (ctrl/cmd+enter, paste images)'}
 				bind:value={input}
 				onkeydown={onKeydown}
+				onpaste={onPaste}
 			></textarea>
 			{#if status === 'running'}
 				<button class="btn btn-error" onclick={interrupt} aria-label="Interrupt">
-					<Square size={16} /> Interrupt
+					<Square size={16} /> <span class="hidden sm:inline">Interrupt</span>
 				</button>
 			{/if}
-			<button class="btn btn-primary" onclick={send} disabled={!input.trim()} aria-label="Send">
-				<Send size={16} /> Send
+			<button class="btn btn-primary" onclick={send} disabled={!canSend} aria-label="Send">
+				<Send size={16} /> <span class="hidden sm:inline">Send</span>
 			</button>
 		</div>
 	</div>

@@ -13,20 +13,22 @@
 	<title>{session.title} · deck</title>
 </svelte:head>
 
-<div class="flex h-[calc(100vh-7.5rem)] flex-col">
+<div class="flex h-[calc(100dvh-7rem)] flex-col">
 	<div class="mb-2 flex items-center gap-2">
-		<a href="/" class="btn btn-ghost btn-sm" aria-label="Back">
+		<a href="/" class="btn btn-ghost btn-sm shrink-0" aria-label="Back">
 			<ArrowLeft size={16} />
 		</a>
 		{#if session.kind === 'claude'}
-			<Bot size={16} class="opacity-70" />
+			<Bot size={16} class="shrink-0 opacity-70" />
 		{:else}
-			<Terminal size={16} class="opacity-70" />
+			<Terminal size={16} class="shrink-0 opacity-70" />
 		{/if}
-		<span class="font-medium">{session.title}</span>
-		<span class="text-xs opacity-60">{shortPath(session.cwd)}</span>
+		<div class="flex min-w-0 flex-1 items-baseline gap-2">
+			<span class="truncate font-medium">{session.title}</span>
+			<span class="hidden truncate text-xs opacity-60 sm:inline">{shortPath(session.cwd)}</span>
+		</div>
 		{#if session.kind === 'claude' && session.permissionMode === 'bypassPermissions'}
-			<span class="badge badge-outline badge-sm">yolo</span>
+			<span class="badge badge-outline badge-sm shrink-0">yolo</span>
 		{/if}
 	</div>
 

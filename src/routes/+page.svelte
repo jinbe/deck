@@ -85,41 +85,44 @@
 	}
 </script>
 
-<div class="mb-4 flex items-center gap-2">
-	<div class="join">
-		{#each ['all', 'claude', 'shell'] as const as f (f)}
-			<button
-				class="btn join-item btn-sm {filter === f ? 'btn-active' : ''}"
-				onclick={() => (filter = f)}
-			>
-				{f}
-			</button>
-		{/each}
+<div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+	<div class="flex items-center gap-2">
+		<div class="join">
+			{#each ['all', 'claude', 'shell'] as const as f (f)}
+				<button
+					class="btn join-item btn-sm {filter === f ? 'btn-active' : ''}"
+					onclick={() => (filter = f)}
+				>
+					{f}
+				</button>
+			{/each}
+		</div>
+		<button
+			class="btn btn-ghost btn-sm"
+			onclick={() => (grouped = !grouped)}
+			title={grouped ? 'Flat list' : 'Group by project'}
+			aria-label="Toggle grouping"
+		>
+			{#if grouped}<FolderGit2 size={16} />{:else}<List size={16} />{/if}
+		</button>
 	</div>
-	<button
-		class="btn btn-ghost btn-sm"
-		onclick={() => (grouped = !grouped)}
-		title={grouped ? 'Flat list' : 'Group by project'}
-		aria-label="Toggle grouping"
-	>
-		{#if grouped}<FolderGit2 size={16} />{:else}<List size={16} />{/if}
-	</button>
-	<div class="flex-1"></div>
-	<a href="/projects" class="btn btn-ghost btn-sm" aria-label="Manage projects" title="Projects">
-		<FolderCog size={16} />
-	</a>
-	<button class="btn btn-ghost btn-sm" onclick={refresh} aria-label="Refresh">
-		<RefreshCw size={16} />
-	</button>
-	<button class="btn btn-sm btn-primary" onclick={() => (modalOpen = true)}>
-		<Plus size={16} /> New
-	</button>
+	<div class="flex items-center gap-2">
+		<a href="/projects" class="btn btn-ghost btn-sm" aria-label="Manage projects" title="Projects">
+			<FolderCog size={16} />
+		</a>
+		<button class="btn btn-ghost btn-sm" onclick={refresh} aria-label="Refresh">
+			<RefreshCw size={16} />
+		</button>
+		<button class="btn btn-sm btn-primary" onclick={() => (modalOpen = true)}>
+			<Plus size={16} /> New
+		</button>
+	</div>
 </div>
 
 {#snippet row(s: DeckSession)}
 	<a
 		href={`/s/${encodeURIComponent(s.id)}`}
-		class="flex items-center gap-3 rounded-box border border-base-300 bg-base-100 px-4 py-3 hover:border-base-content/30"
+		class="flex items-center gap-2 rounded-box border border-base-300 bg-base-100 px-3 py-3 hover:border-base-content/30 sm:gap-3 sm:px-4"
 	>
 		{#if s.kind === 'claude'}
 			<Bot size={18} class="shrink-0 opacity-70" />

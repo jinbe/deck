@@ -182,17 +182,38 @@ function ensureProcess(id: string): Proc {
 	return proc;
 }
 
-// Send a user message. Starts the process if needed; queues if a turn is running.
-export function sendMessage(id: string, text: string) {
+export interface ImageInput {
+	media_type: string;
+	data: string;
+}
+
+// Send a user message, optionally with image attachments. Starts the process if
+// needed; queues if a turn is running.
+export function sendMessage(id: string, text: string, images?: ImageInput[]) {
 	const session = getStoredSession(id);
 	if (!session || session.kind !== 'claude') throw new Error('not a claude session');
 	const proc = ensureProcess(id);
 	if (proc.idleTimer) clearTimeout(proc.idleTimer);
-	appendEvent(id, { type: 'deck.user', text, ts: Date.now() });
+	const hasImages = !!images && images.length > 0;
+	appendEvent(id, {
+		type: 'deck.user',
+		text,
+		images: hasImages ? images : undefined,
+		ts: Date.now()
+	});
 	proc.running = true;
 	setStatus(id, 'running');
+	const content: unknown = hasImages
+		? [
+				...(text ? [{ type: 'text', text }] : []),
+				...images!.map((im) => ({
+					type: 'image',
+					source: { type: 'base64', media_type: im.media_type, data: im.data }
+				}))
+			]
+		: text;
 	proc.child.stdin!.write(
-		JSON.stringify({ type: 'user', message: { role: 'user', content: text } }) + '\n'
+		JSON.stringify({ type: 'user', message: { role: 'user', content } }) + '\n'
 	);
 }
 
