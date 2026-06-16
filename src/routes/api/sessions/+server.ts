@@ -4,6 +4,7 @@ import type { RequestHandler } from './$types';
 import { listSessions, createSession } from '$lib/server/sessions';
 import { createWorktree, isGitRepo } from '$lib/server/git';
 import { startTurn } from '$lib/server/claude';
+import { listProjects, updateProject } from '$lib/server/store';
 
 export const GET: RequestHandler = async () => {
 	return json(await listSessions());
@@ -26,6 +27,10 @@ export const POST: RequestHandler = async ({ request }) => {
 			base: body.worktree.base || undefined
 		});
 		worktree = { repo, branch: body.worktree.branch, createdBranch: !!body.worktree.newBranch };
+		// remember the chosen base branch on the project for next time
+		if (body.worktree.newBranch && listProjects().some((p) => p.path === repo)) {
+			updateProject(repo, { lastBase: body.worktree.base || undefined });
+		}
 	}
 
 	const session = await createSession({

@@ -17,7 +17,8 @@ export const POST: RequestHandler = async ({ request }) => {
 	const project = {
 		name: String(body.name ?? '').trim() || path.basename(dir),
 		path: dir,
-		template: String(body.template ?? '').trim() || undefined
+		template: String(body.template ?? '').trim() || undefined,
+		lastBase: typeof body.lastBase === 'string' ? body.lastBase.trim() || undefined : undefined
 	};
 	addProject(project);
 	return json(project, { status: 201 });

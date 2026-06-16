@@ -27,7 +27,7 @@
 		const res = await fetch('/api/projects', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ path: p.path, name: p.name, template: p.template })
+			body: JSON.stringify({ path: p.path, name: p.name, template: p.template, lastBase: p.lastBase })
 		});
 		if (!res.ok) {
 			errorMsg = (await res.json()).message ?? 'failed to save';
@@ -96,6 +96,11 @@
 					placeholder="default first prompt (optional)"
 					bind:value={p.template}
 				></textarea>
+				<input
+					class="input input-sm mt-2 w-full sm:w-72"
+					placeholder="default base branch (remembered automatically)"
+					bind:value={p.lastBase}
+				/>
 				<div class="mt-1 flex items-center gap-2">
 					<span class="text-xs opacity-50">placeholders: [title] [branch] [cwd]</span>
 					<div class="flex-1"></div>

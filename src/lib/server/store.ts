@@ -45,6 +45,16 @@ export function addProject(project: Project) {
 	writeJson(PROJECTS_FILE, projects);
 }
 
+// Merge a patch into an existing project (preserves other fields).
+export function updateProject(path: string, patch: Partial<Project>): Project | undefined {
+	const projects = listProjects();
+	const project = projects.find((p) => p.path === path);
+	if (!project) return undefined;
+	Object.assign(project, patch);
+	writeJson(PROJECTS_FILE, projects);
+	return project;
+}
+
 export function removeProject(path: string) {
 	writeJson(
 		PROJECTS_FILE,

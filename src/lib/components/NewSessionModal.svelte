@@ -17,6 +17,7 @@
 	let branchDirty = $state(false);
 	let newBranch = $state(true);
 	let base = $state('');
+	let baseDirty = $state(false);
 	let branches = $state<string[]>([]);
 	let prompt = $state('');
 	let promptDirty = $state(false);
@@ -30,6 +31,7 @@
 		if (open) {
 			promptDirty = false;
 			branchDirty = false;
+			baseDirty = false;
 			fetch('/api/projects')
 				.then((r) => r.json())
 				.then((p: Project[]) => {
@@ -51,6 +53,11 @@
 	// Branch defaults to the title until the user edits it.
 	$effect(() => {
 		if (useWorktree && !branchDirty) branch = title.trim();
+	});
+
+	// Base branch defaults to the project's remembered last base.
+	$effect(() => {
+		if (!baseDirty) base = selectedProject?.lastBase ?? '';
 	});
 
 	$effect(() => {
@@ -205,8 +212,11 @@
 						<span>New branch</span>
 					</label>
 					{#if newBranch}
-						<select class="select w-full" bind:value={base}>
+						<select class="select w-full" bind:value={base} onchange={() => (baseDirty = true)}>
 							<option value="">base: default branch</option>
+							{#if base && !branches.includes(base)}
+								<option value={base}>base: {base}</option>
+							{/if}
 							{#each branches as b (b)}
 								<option value={b}>base: {b}</option>
 							{/each}
