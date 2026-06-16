@@ -14,6 +14,8 @@
 		theme = next;
 		document.documentElement.dataset.theme = next;
 		localStorage.setItem('deck-theme', next);
+		const m = document.querySelector('meta[name="theme-color"]');
+		if (m) m.setAttribute('content', next === 'dark' ? '#1d232a' : '#ffffff');
 	}
 
 	const themes = [

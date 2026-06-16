@@ -30,6 +30,18 @@ HOST=127.0.0.1 PORT=4818 DECK_NO_AUTH=1 node build/index.js
 
 Dev: `npm run dev`.
 
+## Install on a phone (PWA / WebAPK)
+
+deck ships a web manifest, icons, and a service worker, so Chrome on Android installs it as a WebAPK (its own home-screen icon, standalone window, no browser chrome). This needs a real HTTPS origin, which the Tailscale `serve` setup above provides.
+
+1. On the phone, open the tailnet URL in **Chrome** (e.g. `https://<host>.ts.net:4818`). It must be the `https://` address, not a bare IP.
+2. Chrome menu (⋮) → **Add to Home screen** / **Install app**. (The same install works from desktop Chrome/Edge.)
+3. Launch from the new icon; it opens standalone.
+
+The service worker only caches the static app shell (hashed JS/CSS, icons). All `/api/*` traffic, including the SSE transcript stream, always goes straight to the network, so live sessions are never served stale. The status-bar color follows the active light/dark theme.
+
+On iOS, Safari → Share → **Add to Home Screen** gives a similar standalone launcher (Apple doesn't generate a WebAPK, but the manifest and apple-touch-icon are honored).
+
 ## Notes
 
 - Each active Claude session runs as one long-lived `claude --input-format stream-json` process. Assistant text streams in live; a message sent mid-turn is queued and runs next; **Interrupt** stops the current turn (via a control_request) without ending the session, so you can immediately redirect it. Idle processes are torn down after 20 min and respawned with `--resume` on the next message.
