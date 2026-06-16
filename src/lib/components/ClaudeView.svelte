@@ -2,6 +2,7 @@
 	import type { DeckSession } from '$lib/types';
 	import Linked from './Linked.svelte';
 	import ToolCall from './ToolCall.svelte';
+	import AskQuestion from './AskQuestion.svelte';
 	import { Send, Square, ChevronDown, ArrowDown, Paperclip, X } from '@lucide/svelte';
 
 	let { session }: { session: DeckSession } = $props();
@@ -33,6 +34,30 @@
 		}
 		return m;
 	});
+
+	// AskUserQuestion calls the headless CLI auto-dismisses; we render the options
+	// and feed the user's pick back as the next message. Track which have been
+	// answered (via the answersFor marker on our own deck.user events).
+	const answeredQuestions = $derived.by(() => {
+		const m = new Map<string, { header: string; labels: string[] }[]>();
+		for (const ev of events) {
+			if (ev.type === 'deck.user' && ev.answersFor) m.set(ev.answersFor, ev.answers ?? []);
+		}
+		return m;
+	});
+
+	async function answerQuestion(
+		id: string,
+		text: string,
+		answers: { header: string; labels: string[] }[]
+	) {
+		atBottom = true;
+		await fetch(`/api/sessions/${encodeURIComponent(session.id)}/send`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ text, answersFor: id, answers })
+		});
+	}
 
 	$effect(() => {
 		const source = new EventSource(`/api/sessions/${encodeURIComponent(session.id)}/events`);
@@ -217,6 +242,13 @@
 							</summary>
 							<pre class="break-words whitespace-pre-wrap pt-1">{block.thinking}</pre>
 						</details>
+					{:else if block.type === 'tool_use' && block.name === 'AskUserQuestion'}
+						<AskQuestion
+							{block}
+							answered={answeredQuestions.has(block.id)}
+							answer={answeredQuestions.get(block.id)}
+							onanswer={(text, answers) => answerQuestion(block.id, text, answers)}
+						/>
 					{:else if block.type === 'tool_use'}
 						<ToolCall {block} result={resultsById.get(block.id)} />
 					{/if}

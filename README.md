@@ -37,6 +37,7 @@ Dev: `npm run dev`.
 - A server restart drops live processes (transcripts and resume state survive; the next message respawns and resumes).
 - Tool calls render structured: Bash shows the command + output (unified diffs in output are colorized), Edit/MultiEdit show a red/green line diff, Write shows its content as an added-line diff, TodoWrite shows the checklist, Read/Grep/Glob and others collapse their output. Each tool result is paired back to its call.
 - Image attachments: paste an image into the Claude composer, use the paperclip to pick files, or drag-and-drop onto the conversation. Images are sent as base64 blocks in the user message and shown inline in the transcript.
+- `AskUserQuestion`: when Claude asks a multiple-choice question, deck renders the options as buttons (single- or multi-select, plus an "other" field) and sends your pick back as the next message. The headless CLI auto-dismisses the prompt itself, so your answer arrives as a follow-up the model continues from; once answered the card shows the chosen options.
 - http(s) links in session output are clickable. The transcript view only auto-scrolls when you're already near the bottom; a jump-to-latest button appears otherwise.
 - The UI is mobile-friendly: no horizontal overflow at phone widths, button labels collapse to icons, and the conversation height uses `dvh` so the composer stays reachable.
 - State: `~/.deck/{sessions.json,projects.json,token,transcripts/}`.

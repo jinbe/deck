@@ -187,9 +187,15 @@ export interface ImageInput {
 	data: string;
 }
 
+export interface SendMeta {
+	// Marks this message as the answer to an AskUserQuestion tool_use id.
+	answersFor?: string;
+	answers?: { header: string; labels: string[] }[];
+}
+
 // Send a user message, optionally with image attachments. Starts the process if
 // needed; queues if a turn is running.
-export function sendMessage(id: string, text: string, images?: ImageInput[]) {
+export function sendMessage(id: string, text: string, images?: ImageInput[], meta?: SendMeta) {
 	const session = getStoredSession(id);
 	if (!session || session.kind !== 'claude') throw new Error('not a claude session');
 	const proc = ensureProcess(id);
@@ -199,6 +205,8 @@ export function sendMessage(id: string, text: string, images?: ImageInput[]) {
 		type: 'deck.user',
 		text,
 		images: hasImages ? images : undefined,
+		answersFor: meta?.answersFor,
+		answers: meta?.answers,
 		ts: Date.now()
 	});
 	proc.running = true;

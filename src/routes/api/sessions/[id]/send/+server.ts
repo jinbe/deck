@@ -37,8 +37,12 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	if (session.kind === 'claude') {
 		const images = parseImages(body.images);
 		if (!text.trim() && images.length === 0) error(400, 'empty prompt');
+		const meta =
+			typeof body.answersFor === 'string'
+				? { answersFor: body.answersFor, answers: Array.isArray(body.answers) ? body.answers : undefined }
+				: undefined;
 		// no running guard: a message sent mid-turn is queued and runs next
-		sendMessage(session.id, text, images.length ? images : undefined);
+		sendMessage(session.id, text, images.length ? images : undefined, meta);
 		return json({ ok: true, status: 'running' });
 	}
 
