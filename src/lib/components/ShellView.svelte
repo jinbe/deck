@@ -65,7 +65,7 @@
 	<div class="mt-3 space-y-2">
 		<div class="flex items-center gap-2">
 			<input
-				class="input flex-1 font-mono text-sm"
+				class="input terminal-font flex-1 text-sm"
 				placeholder={dead ? 'session is dead' : 'type a command, enter to send'}
 				bind:value={input}
 				onkeydown={onKeydown}

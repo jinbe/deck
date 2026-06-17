@@ -57,8 +57,22 @@
 	scroll-behavior: auto;
 }
 
+@font-face {
+	font-family: 'Hack Nerd Font Mono';
+	src: url('/fonts/HackNerdFontMono-Regular.woff2') format('woff2');
+	font-weight: normal;
+	font-style: normal;
+	font-display: swap;
+}
+
+/* Single-width Nerd Font so captured terminal grids stay column-aligned and
+   prompt glyphs (powerline, git, etc.) render. */
+.terminal-font {
+	font-family: 'Hack Nerd Font Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 .terminal-output {
-	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-family: 'Hack Nerd Font Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 	font-size: 0.8rem;
 	line-height: 1.35;
 	white-space: pre-wrap;
