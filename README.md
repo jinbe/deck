@@ -1,15 +1,18 @@
 # deck
 
-Single browser app for driving Claude Code sessions and adhoc tmux terminals on this machine. Built to replace the aoe + gmux split with one flat, recency-sorted session list, with light/dark/e-ink themes (e-ink kills all motion and shadows).
+A single browser app for driving Claude Code sessions and tmux terminals on one machine. One flat, recency-sorted list of every session, a structured chat view for Claude, and a polled terminal view for shells. Built to replace the aoe + gmux split. Light, dark, and e-ink themes (e-ink kills all motion and shadows).
 
-## How it works
+It runs headless Claude Code under your normal subscription auth, so there's no API key to manage, and it installs as a PWA on a phone so you can drive sessions from anywhere on your tailnet.
 
-- **Claude sessions** run headless Claude Code (`claude -p --output-format stream-json --resume`) under your normal Claude subscription auth. No API key needed. Each turn spawns a process; events are appended to a JSONL transcript in `~/.deck/transcripts/` and streamed to the browser over SSE. The UI renders a structured chat view (messages, collapsed tool calls, turn cost).
-- **Shell sessions** are plain tmux sessions. Every live tmux session on the box shows up in the list (aoe/gmux sessions included, marked adhoc); the detail view is a polled `capture-pane -e` snapshot with a send box and key shortcuts (ctrl-c, esc, arrows). You can still `tmux attach` from any terminal. Terminal output is rendered in a self-hosted **Hack Nerd Font Mono** (single-width, so captured grids stay aligned and prompt glyphs render); swap the `@font-face` in `src/routes/layout.css` for any other Nerd Font. ANSI colors are parsed and rendered over the current theme background (light/dark); the e-ink theme forces them monochrome.
-- **Worktrees**: session creation can make a `git worktree` at `<repo>-worktrees/<branch>` (new or existing branch). Init scripts are intentionally manual.
-- **Projects** are registered paths stored in `~/.deck/projects.json`, used to populate the new-session picker. Each can carry a template first-prompt that prefills new Claude sessions; placeholders `[title]`, `[branch]`, `[cwd]` are substituted at creation. The home list groups sessions by project (worktrees fold under their repo).
+## Requirements
 
-## Run
+- Node 20 or newer
+- [pnpm](https://pnpm.io) (the repo pins a version via `packageManager`)
+- The `claude` CLI (Claude Code) on your `PATH`, already logged in
+- `tmux` and `git`
+- `tailscale` (optional, for remote/phone access over HTTPS)
+
+## Setup
 
 ```sh
 pnpm install
@@ -17,41 +20,72 @@ pnpm build
 PORT=4818 node build/index.js
 ```
 
-The access URL (with token) is printed on first request and the token lives in `~/.deck/token`. Open `http://<host>:4818/?token=<token>` once; a year-long cookie is set. Override with `DECK_TOKEN` / `DECK_DATA` env vars.
+On first request deck prints an access URL with a token, and stores the token in `~/.deck/token`. Open `http://<host>:4818/?token=<token>` once and a year-long cookie is set.
 
-For remote access, bind loopback and front it with Tailscale:
+Dev server: `pnpm dev`.
+
+### Environment variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `3000` | HTTP port (the examples use `4818`) |
+| `HOST` | `0.0.0.0` | Bind address |
+| `DECK_DATA` | `~/.deck` | Data directory (state, transcripts, keys) |
+| `DECK_TOKEN` | random | Override the generated access token |
+| `DECK_NO_AUTH` | unset | Set to `1` to skip the token gate entirely |
+| `DECK_PUSH_SUBJECT` | `mailto:deck@localhost` | VAPID contact for web push |
+
+## Remote access (Tailscale)
+
+Bind loopback and front it with Tailscale `serve` so the tailnet is the access boundary:
 
 ```sh
 tailscale serve --bg --https 4818 http://127.0.0.1:4818
 HOST=127.0.0.1 PORT=4818 DECK_NO_AUTH=1 node build/index.js
 ```
 
-`DECK_NO_AUTH=1` skips the token gate, which is redundant once the tailnet is the access boundary. Leave it unset for token auth.
+`DECK_NO_AUTH=1` drops the token gate, which is redundant once only the tailnet can reach it. Leave it unset to keep token auth.
 
-Dev: `pnpm dev`.
+The dev server does this for you: `vite dev` runs a small plugin that registers a `tailscale serve` for the lifetime of the process (see `vite.config.ts`).
 
-## Install on a phone (PWA / WebAPK)
+## Install on a phone (PWA)
 
-deck ships a web manifest, icons, and a service worker, so Chrome on Android installs it as a WebAPK (its own home-screen icon, standalone window, no browser chrome). This needs a real HTTPS origin, which the Tailscale `serve` setup above provides.
+deck ships a web manifest, icons, and a service worker, so Chrome on Android installs it as a WebAPK (its own icon, standalone window, no browser chrome). This needs a real HTTPS origin, which the Tailscale setup above provides.
 
-1. On the phone, open the tailnet URL in **Chrome** (e.g. `https://<host>.ts.net:4818`). It must be the `https://` address, not a bare IP. Reload once if you'd opened it before the PWA bits existed.
-2. Tap the **Install** button that appears in deck's top bar, or use Chrome menu (⋮) → **Install app** / **Add to Home screen**. (The same install works from desktop Chrome/Edge.)
+1. On the phone, open the tailnet URL in **Chrome** (e.g. `https://<host>.ts.net:4818`). It must be the `https://` address, not a bare IP.
+2. Tap the **Install** button in the top bar, or use the Chrome menu → **Install app**. (The same works from desktop Chrome/Edge.)
 3. Launch from the new icon; it opens standalone.
 
-The service worker caches the static app shell (hashed JS/CSS, icons) plus an offline fallback page, so the app satisfies Chrome's "works offline" install criterion. All `/api/*` traffic, including the SSE transcript stream, always goes straight to the network, so live sessions are never served stale. The status-bar color follows the active light/dark theme.
+The service worker caches the static app shell plus an offline fallback, so deck meets Chrome's "works offline" install criterion. All `/api/*` traffic, including the SSE transcript stream, always goes straight to the network, so live sessions are never stale.
 
-**If no Install option shows:** a true WebAPK install needs Google Play Services to mint the APK. On de-Googled or minimal Android builds without Play Services, Chrome offers only **Add to Home screen**, which still creates a standalone launcher (the manifest's `display: standalone` is honored), just not a real WebAPK. The in-app Install button only appears on Chromium browsers that support web-app install; if it never appears, the browser/device doesn't support it. Firefox for Android can also add a standalone launcher without Play Services.
+**If no Install option shows:** a true WebAPK needs Google Play Services. On de-Googled Android, Chrome offers only **Add to Home screen**, which still creates a standalone launcher. On iOS, Safari → Share → **Add to Home Screen** does the same (no WebAPK, but the manifest and apple-touch-icon are honoured).
 
-On iOS, Safari → Share → **Add to Home Screen** gives a similar standalone launcher (Apple doesn't generate a WebAPK, but the manifest and apple-touch-icon are honored).
+## Notifications
+
+deck can push notifications to the installed PWA so you don't have to babysit a session. Tap the bell in the top bar to enable it (needs an HTTPS origin and notification permission). You get notified when:
+
+- Claude asks a question
+- a turn finishes (turns under 12s are skipped, since you're probably watching those)
+- a Claude process crashes
+- a shell exits
+
+VAPID keys are generated on first run and stored in `~/.deck/vapid.json`; subscriptions live in `~/.deck/push-subscriptions.json`. Override the VAPID contact with `DECK_PUSH_SUBJECT`.
+
+## How it works
+
+- **Claude sessions** run headless Claude Code (`claude -p --input-format stream-json --output-format stream-json --resume`) under your normal subscription auth. Each active session is one long-lived process; events are appended to a JSONL transcript in `~/.deck/transcripts/` and streamed to the browser over SSE. A message sent mid-turn is queued and runs next; **Interrupt** ends the current turn (via a `control_request`) without ending the session. Idle processes are torn down after 20 minutes and respawned with `--resume` on the next message.
+- **Shell sessions** are plain tmux sessions. Every live tmux session on the box shows up (aoe/gmux sessions included, marked *adhoc*); the detail view is a polled `capture-pane -e` snapshot with a send box and key shortcuts. You can still `tmux attach` from any terminal. Output renders in a self-hosted single-width **Hack Nerd Font Mono** so captured grids stay aligned; ANSI colours are parsed and drawn over the current theme (e-ink forces them monochrome). Untitled shells are auto-named after a starship.
+- **Worktrees**: new sessions can run in a `git worktree` at `<repo>-worktrees/<branch>`. The picker has three modes: *None* (run in the project root), *Existing* (pick a worktree that already exists), and *New* (branch off and create one). Shells default to *None*; Claude sessions default to *New*.
+- **Projects** are registered paths in `~/.deck/projects.json` that populate the new-session picker. Each can carry a template first-prompt with `[title]`, `[branch]`, `[cwd]` placeholders. The home list groups sessions by project (worktrees fold under their repo); each group has a quick-add button.
+- **Path inputs** autocomplete directories as you type and resolve a leading `~/` to your home directory.
+- **Session sidebar**: the session view has a project-grouped switcher (sticky on desktop, a hamburger drawer on mobile) for jumping between sessions, quick-adding a session to a project, or opening a shell straight into a Claude worktree.
+- **Questions**: when Claude asks a multiple-choice question it goes through deck's own blocking MCP `ask` tool, not the built-in `AskUserQuestion` (which the headless CLI can only auto-dismiss). deck renders the options as buttons; your pick resolves the still-open tool call and the same turn carries on. The chosen options stay on the card after reload.
+- **Tool calls** render structured: Bash shows the command, Edit/MultiEdit a red/green line diff, Write its content as an added-line diff, TodoWrite the checklist. Bash output and the diffs collapse behind a single shared toggle (collapsed by default); flip one and they all flip. Each result is paired back to its call.
+- **Images**: paste into the Claude composer, pick with the paperclip, or drag-and-drop onto the conversation. They're sent as base64 blocks and shown inline.
 
 ## Notes
 
-- Each active Claude session runs as one long-lived `claude --input-format stream-json` process. Assistant text streams in live; a message sent mid-turn is queued and runs next; **Interrupt** stops the current turn (via a control_request) without ending the session, so you can immediately redirect it. Idle processes are torn down after 20 min and respawned with `--resume` on the next message.
-- Permission modes: new Claude sessions default to YOLO (`--dangerously-skip-permissions`); untick for `acceptEdits`. Headless turns cannot answer permission prompts, so `default`/`plan` modes will stall on gated tools.
-- A server restart drops live processes (transcripts and resume state survive; the next message respawns and resumes).
-- Tool calls render structured: Bash shows the command + output (unified diffs in output are colorized), Edit/MultiEdit show a red/green line diff, Write shows its content as an added-line diff, TodoWrite shows the checklist, Read/Grep/Glob and others collapse their output. Each tool result is paired back to its call.
-- Image attachments: paste an image into the Claude composer, use the paperclip to pick files, or drag-and-drop onto the conversation. Images are sent as base64 blocks in the user message and shown inline in the transcript.
-- `AskUserQuestion`: when Claude asks a multiple-choice question, deck renders the options as buttons (single- or multi-select, plus an "other" field) and sends your pick back as the next message. The headless CLI auto-dismisses the prompt itself, so your answer arrives as a follow-up the model continues from; once answered the card shows the chosen options.
-- http(s) links in session output are clickable. The transcript view only auto-scrolls when you're already near the bottom; a jump-to-latest button appears otherwise.
-- The UI is mobile-friendly: no horizontal overflow at phone widths, button labels collapse to icons, and the conversation height uses `dvh` so the composer stays reachable.
-- State: `~/.deck/{sessions.json,projects.json,token,transcripts/}`.
+- Permission modes: new Claude sessions default to YOLO (`--dangerously-skip-permissions`); untick for `acceptEdits`. Headless turns can't answer permission prompts, so `default`/`plan` will stall on gated tools. The `ask` tool is allow-listed so it works in either mode.
+- A server restart drops live processes. Transcripts and resume state survive, so the next message respawns and resumes.
+- http(s) links in session output are clickable. The transcript auto-scrolls only when you're already near the bottom; a jump-to-latest button appears otherwise.
+- State lives in `~/.deck/`: `sessions.json`, `projects.json`, `token`, `vapid.json`, `push-subscriptions.json`, and `transcripts/`.
