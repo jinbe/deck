@@ -89,3 +89,11 @@ VAPID keys are generated on first run and stored in `~/.deck/vapid.json`; subscr
 - A server restart drops live processes. Transcripts and resume state survive, so the next message respawns and resumes.
 - http(s) links in session output are clickable. The transcript auto-scrolls only when you're already near the bottom; a jump-to-latest button appears otherwise.
 - State lives in `~/.deck/`: `sessions.json`, `projects.json`, `token`, `vapid.json`, `push-subscriptions.json`, and `transcripts/`.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+[MIT](LICENSE) © Jin Chan
