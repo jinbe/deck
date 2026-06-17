@@ -35,16 +35,21 @@
 		return m;
 	});
 
-	// AskUserQuestion calls the headless CLI auto-dismisses; we render the options
-	// and feed the user's pick back as the next message. Track which have been
-	// answered (via the answersFor marker on our own deck.user events).
+	// Questions go through deck's blocking MCP `ask` tool. The pick is posted to
+	// /answer, which resolves the still-open tool call (continuing the same turn)
+	// and records a deck.answer marker so the chosen options persist on reload.
 	const answeredQuestions = $derived.by(() => {
 		const m = new Map<string, { header: string; labels: string[] }[]>();
 		for (const ev of events) {
-			if (ev.type === 'deck.user' && ev.answersFor) m.set(ev.answersFor, ev.answers ?? []);
+			if ((ev.type === 'deck.answer' || ev.type === 'deck.user') && ev.answersFor)
+				m.set(ev.answersFor, ev.answers ?? []);
 		}
 		return m;
 	});
+
+	function isAskTool(block: AnyEvent): boolean {
+		return block.name === 'mcp__deck__ask' || block.name === 'AskUserQuestion';
+	}
 
 	async function answerQuestion(
 		id: string,
@@ -52,10 +57,10 @@
 		answers: { header: string; labels: string[] }[]
 	) {
 		atBottom = true;
-		await fetch(`/api/sessions/${encodeURIComponent(session.id)}/send`, {
+		await fetch(`/api/sessions/${encodeURIComponent(session.id)}/answer`, {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ text, answersFor: id, answers })
+			body: JSON.stringify({ text, toolUseId: id, answers })
 		});
 	}
 
@@ -242,7 +247,7 @@
 							</summary>
 							<pre class="break-words whitespace-pre-wrap pt-1">{block.thinking}</pre>
 						</details>
-					{:else if block.type === 'tool_use' && block.name === 'AskUserQuestion'}
+					{:else if block.type === 'tool_use' && isAskTool(block)}
 						<AskQuestion
 							{block}
 							answered={answeredQuestions.has(block.id)}

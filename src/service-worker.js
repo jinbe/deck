@@ -50,3 +50,40 @@ self.addEventListener('fetch', (event) => {
 	// Anything else: network-first, fall back to cache if present.
 	event.respondWith(fetch(request).catch(() => caches.match(request)));
 });
+
+// Web Push: show the notification deck sent (question asked, turn ended, crash).
+self.addEventListener('push', (event) => {
+	let data = {};
+	try {
+		data = event.data ? event.data.json() : {};
+	} catch {
+		data = { title: 'deck', body: event.data ? event.data.text() : '' };
+	}
+	event.waitUntil(
+		self.registration.showNotification(data.title || 'deck', {
+			body: data.body || '',
+			tag: data.tag,
+			data: { url: data.url || '/' },
+			icon: '/icon-192.png',
+			badge: '/icon-192.png',
+			renotify: !!data.tag
+		})
+	);
+});
+
+// Focus an existing window for the session if one is open, else open it.
+self.addEventListener('notificationclick', (event) => {
+	event.notification.close();
+	const target = event.notification.data?.url || '/';
+	event.waitUntil(
+		self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+			for (const client of clients) {
+				if (client.url.includes(target) && 'focus' in client) return client.focus();
+			}
+			if (clients.length && 'navigate' in clients[0]) {
+				return clients[0].focus().then((c) => c && c.navigate(target));
+			}
+			return self.clients.openWindow(target);
+		})
+	);
+});

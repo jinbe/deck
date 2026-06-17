@@ -4,6 +4,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { transcriptsDir } from './config';
 import { getStoredSession, updateSession } from './store';
+import { ensureMcp, mcpUrl } from './mcp';
+import { rejectAsk } from './ask';
+import { notify } from './push';
+
+// Questions go through deck's blocking MCP `ask` tool instead of the built-in
+// AskUserQuestion, which the headless CLI can only auto-dismiss.
+const ASK_PROMPT =
+	'To ask the user a question, call the `mcp__deck__ask` tool (same schema as AskUserQuestion: a `questions` array of { question, header, multiSelect, options:[{label, description}] }). It blocks until the user answers in the deck UI. The built-in AskUserQuestion tool is disabled here.';
 
 interface Proc {
 	child: ChildProcess;
@@ -55,6 +63,31 @@ function setStatus(id: string, status: 'running' | 'idle' | 'error') {
 	bus.emit(`status:${id}`, status);
 }
 
+// Record the user's answer to a question on the transcript so the UI can show
+// the picked options (and mark it answered) on reload, independent of the MCP
+// tool_result that unblocks the turn.
+export function recordAnswer(id: string, toolUseId: string, answers: unknown) {
+	appendEvent(id, { type: 'deck.answer', answersFor: toolUseId, answers, ts: Date.now() });
+}
+
+// Push a notification when a turn finishes. Skip quick turns the user is almost
+// certainly watching; flag non-success endings (interrupt, error, max turns).
+function notifyTurnEnd(id: string, event: Record<string, unknown>) {
+	const duration = typeof event.duration_ms === 'number' ? event.duration_ms : 0;
+	if (duration && duration < 12000) return;
+	const title = getStoredSession(id)?.title ?? id;
+	const subtype = event.subtype as string | undefined;
+	notify({
+		title:
+			subtype && subtype !== 'success'
+				? `Turn ended (${subtype}) · ${title}`
+				: `Claude finished · ${title}`,
+		body: 'Tap to open the session',
+		tag: id,
+		url: `/s/${id}`
+	});
+}
+
 function startProcess(id: string): Proc {
 	const session = getStoredSession(id);
 	if (!session || session.kind !== 'claude') throw new Error('not a claude session');
@@ -74,6 +107,15 @@ function startProcess(id: string): Proc {
 	} else {
 		args.push('--permission-mode', session.permissionMode ?? 'acceptEdits');
 	}
+
+	// Replace the built-in question tool with deck's blocking MCP one, and allow
+	// it through without a permission prompt (which headless mode can't answer).
+	args.push(
+		'--disallowedTools', 'AskUserQuestion',
+		'--allowedTools', 'mcp__deck__ask',
+		'--append-system-prompt', ASK_PROMPT,
+		'--mcp-config', JSON.stringify({ mcpServers: { deck: { type: 'http', url: mcpUrl(id) } } })
+	);
 
 	const child = spawn('claude', args, {
 		cwd: session.cwd,
@@ -103,13 +145,17 @@ function startProcess(id: string): Proc {
 	child.on('exit', (code) => {
 		if (proc.idleTimer) clearTimeout(proc.idleTimer);
 		procs.delete(id);
+		rejectAsk(id, 'process exited');
 		if (proc.running && code !== 0) {
-			appendEvent(id, {
-				type: 'deck.error',
-				text: proc.stderrTail.trim() || `claude exited with code ${code}`,
-				ts: Date.now()
-			});
+			const text = proc.stderrTail.trim() || `claude exited with code ${code}`;
+			appendEvent(id, { type: 'deck.error', text, ts: Date.now() });
 			setStatus(id, 'error');
+			notify({
+				title: `Session crashed · ${getStoredSession(id)?.title ?? id}`,
+				body: text.split('\n').pop() || 'claude exited unexpectedly',
+				tag: id,
+				url: `/s/${id}`
+			});
 		} else if (proc.running) {
 			setStatus(id, 'idle');
 		}
@@ -167,7 +213,9 @@ function handleEvent(id: string, proc: Proc, event: Record<string, unknown>) {
 		proc.running = false;
 		appendEvent(id, event);
 		setStatus(id, 'idle');
+		rejectAsk(id, 'turn ended');
 		scheduleIdleTeardown(id, proc);
+		notifyTurnEnd(id, event);
 		return;
 	}
 
@@ -195,9 +243,10 @@ export interface SendMeta {
 
 // Send a user message, optionally with image attachments. Starts the process if
 // needed; queues if a turn is running.
-export function sendMessage(id: string, text: string, images?: ImageInput[], meta?: SendMeta) {
+export async function sendMessage(id: string, text: string, images?: ImageInput[], meta?: SendMeta) {
 	const session = getStoredSession(id);
 	if (!session || session.kind !== 'claude') throw new Error('not a claude session');
+	await ensureMcp(); // the MCP server must be listening before the process spawns
 	const proc = ensureProcess(id);
 	if (proc.idleTimer) clearTimeout(proc.idleTimer);
 	const hasImages = !!images && images.length > 0;
@@ -229,6 +278,7 @@ export function sendMessage(id: string, text: string, images?: ImageInput[], met
 export function interrupt(id: string) {
 	const proc = procs.get(id);
 	if (!proc) return;
+	rejectAsk(id, 'interrupted');
 	proc.reqSeq += 1;
 	proc.child.stdin!.write(
 		JSON.stringify({

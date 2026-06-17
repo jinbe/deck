@@ -1,8 +1,14 @@
 import type { Handle } from '@sveltejs/kit';
 import { redirect, json } from '@sveltejs/kit';
 import { authToken, noAuth, printAccessUrl } from '$lib/server/config';
+import { ensureMcp } from '$lib/server/mcp';
+import '$lib/server/monitor';
 
 const COOKIE = 'deck_token';
+
+// Start the localhost MCP server (blocking `ask` tool) and shell monitor at boot
+// so the MCP port is ready before any claude session spawns.
+ensureMcp();
 
 export const handle: Handle = async ({ event, resolve }) => {
 	printAccessUrl(event.url.origin);
