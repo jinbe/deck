@@ -12,8 +12,8 @@ Single browser app for driving Claude Code sessions and adhoc tmux terminals on 
 ## Run
 
 ```sh
-npm install
-npm run build
+pnpm install
+pnpm build
 PORT=4818 node build/index.js
 ```
 
@@ -28,7 +28,7 @@ HOST=127.0.0.1 PORT=4818 DECK_NO_AUTH=1 node build/index.js
 
 `DECK_NO_AUTH=1` skips the token gate, which is redundant once the tailnet is the access boundary. Leave it unset for token auth.
 
-Dev: `npm run dev`.
+Dev: `pnpm dev`.
 
 ## Install on a phone (PWA / WebAPK)
 
