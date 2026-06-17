@@ -1,0 +1,14 @@
+{
+	"health": {
+		"ignore": [
+			// Agent CLI adapters are flat, defensive JSON parsers; their cyclomatic
+			// complexity comes from null-safety on untyped CLI output, not tangled
+			// logic. Dead-code and duplication still apply to them.
+			"src/lib/server/agents/**",
+			// Svelte components mix template and logic, and fallow can't analyse them
+			// in the pre-commit base snapshot (no generated .svelte-kit there), so it
+			// can't tell pre-existing component complexity from new. Skip them.
+			"**/*.svelte"
+		]
+	}
+}

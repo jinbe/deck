@@ -1,12 +1,12 @@
 <script lang="ts">
-	import type { DeckSession, NewSessionPreset, Project } from '$lib/types';
+	import type { DeckSession, NewSessionPreset, Project, SessionKind } from '$lib/types';
 	import { relativeTime, shortPath, deriveGroup } from '$lib/time';
 	import NewSessionModal from '$lib/components/NewSessionModal.svelte';
 	import { Bot, Terminal, Plus, Trash2, RefreshCw, FolderGit2, List, FolderCog } from '@lucide/svelte';
 
 	let sessions = $state<DeckSession[]>([]);
 	let projects = $state<Project[]>([]);
-	let filter = $state<'all' | 'claude' | 'shell'>('all');
+	let filter = $state<'all' | SessionKind>('all');
 	let grouped = $state(true);
 	let modalOpen = $state(false);
 	let preset = $state<NewSessionPreset | null>(null);
@@ -36,6 +36,13 @@
 	});
 
 	const visible = $derived(filter === 'all' ? sessions : sessions.filter((s) => s.kind === filter));
+
+	// Only surface filter buttons for kinds that actually have sessions.
+	const filterKinds = $derived(
+		(['claude', 'pi', 'codex', 'shell'] as SessionKind[]).filter((k) =>
+			sessions.some((s) => s.kind === k)
+		)
+	);
 
 	// Group sessions by derived project, ordered by each group's most recent session.
 	const groups = $derived.by(() => {
@@ -99,10 +106,10 @@
 <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
 	<div class="flex items-center gap-2">
 		<div class="join">
-			{#each ['all', 'claude', 'shell'] as const as f (f)}
+			{#each ['all', ...filterKinds] as f (f)}
 				<button
 					class="btn join-item btn-sm {filter === f ? 'btn-active' : ''}"
-					onclick={() => (filter = f)}
+					onclick={() => (filter = f as 'all' | SessionKind)}
 				>
 					{f}
 				</button>
@@ -135,15 +142,18 @@
 		href={`/s/${encodeURIComponent(s.id)}`}
 		class="flex items-center gap-2 rounded-box border border-base-300 bg-base-100 px-3 py-3 hover:border-base-content/30 sm:gap-3 sm:px-4"
 	>
-		{#if s.kind === 'claude'}
-			<Bot size={18} class="shrink-0 opacity-70" />
-		{:else}
+		{#if s.kind === 'shell'}
 			<Terminal size={18} class="shrink-0 opacity-70" />
+		{:else}
+			<Bot size={18} class="shrink-0 opacity-70" />
 		{/if}
 		<div class="min-w-0 flex-1">
 			<div class="truncate font-medium">{s.title}</div>
 			<div class="truncate text-xs opacity-60">{shortPath(s.cwd)}</div>
 		</div>
+		{#if s.kind === 'pi' || s.kind === 'codex'}
+			<span class="badge badge-ghost badge-sm">{s.kind}</span>
+		{/if}
 		{#if s.kind === 'shell' && s.attached}
 			<span class="badge badge-outline badge-sm">attached</span>
 		{/if}

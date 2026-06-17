@@ -53,12 +53,12 @@ export function readTranscript(id: string): unknown[] {
 	}
 }
 
-function appendEvent(id: string, event: Record<string, unknown>) {
+export function appendEvent(id: string, event: Record<string, unknown>) {
 	fs.appendFileSync(transcriptPath(id), JSON.stringify(event) + '\n');
 	bus.emit(`event:${id}`, event);
 }
 
-function setStatus(id: string, status: 'running' | 'idle' | 'error') {
+export function setStatus(id: string, status: 'running' | 'idle' | 'error') {
 	updateSession(id, { status, lastActiveAt: Date.now() });
 	bus.emit(`status:${id}`, status);
 }

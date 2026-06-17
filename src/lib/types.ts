@@ -1,5 +1,10 @@
-export type SessionKind = 'claude' | 'shell';
+export type SessionKind = 'claude' | 'pi' | 'codex' | 'shell';
 export type SessionStatus = 'running' | 'idle' | 'error' | 'dead';
+
+// Agent kinds drive an LLM coding agent (chat view); 'shell' is a tmux terminal.
+export function isAgentKind(kind: SessionKind): kind is Exclude<SessionKind, 'shell'> {
+	return kind !== 'shell';
+}
 
 export interface DeckSession {
 	id: string;
@@ -9,9 +14,12 @@ export interface DeckSession {
 	createdAt: number;
 	lastActiveAt: number;
 	status: SessionStatus;
-	// claude
+	// agents (claude/pi/codex)
 	claudeSessionId?: string;
+	// resume handle for pi/codex (pi session-file path, codex thread id)
+	agentSessionId?: string;
 	model?: string;
+	provider?: string;
 	permissionMode?: 'acceptEdits' | 'bypassPermissions' | 'default' | 'plan';
 	// shell
 	tmuxName?: string;

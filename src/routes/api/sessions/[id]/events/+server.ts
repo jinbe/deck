@@ -1,13 +1,15 @@
 import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { isAgentKind } from '$lib/types';
 import { getSession } from '$lib/server/sessions';
-import { bus, readTranscript, isTurnRunning } from '$lib/server/claude';
+import { bus, readTranscript } from '$lib/server/claude';
+import { agentTurnRunning } from '$lib/server/agents/dispatch';
 
 // SSE: replay the stored transcript, then stream live events for the session.
 export const GET: RequestHandler = async ({ params }) => {
 	const session = await getSession(params.id);
 	if (!session) error(404, 'session not found');
-	if (session.kind !== 'claude') error(400, 'not a claude session');
+	if (!isAgentKind(session.kind)) error(400, 'not an agent session');
 
 	const id = session.id;
 	const encoder = new TextEncoder();
@@ -24,7 +26,7 @@ export const GET: RequestHandler = async ({ params }) => {
 			};
 
 			for (const event of readTranscript(id)) send('transcript', event);
-			send('status', isTurnRunning(id) ? 'running' : session.status);
+			send('status', agentTurnRunning(id) ? 'running' : session.status);
 
 			const onEvent = (event: unknown) => send('transcript', event);
 			const onStatus = (status: unknown) => send('status', status);

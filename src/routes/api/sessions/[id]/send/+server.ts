@@ -1,7 +1,9 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { isAgentKind } from '$lib/types';
 import { getSession } from '$lib/server/sessions';
-import { sendMessage, interrupt, type ImageInput } from '$lib/server/claude';
+import { agentSend, agentInterrupt } from '$lib/server/agents/dispatch';
+import type { ImageInput } from '$lib/server/claude';
 import { sendKeys, sendRawKey } from '$lib/server/tmux';
 import { updateSession } from '$lib/server/store';
 
@@ -28,21 +30,22 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	const body = await request.json();
 
 	if (body.action === 'interrupt' || body.action === 'stop') {
-		if (session.kind === 'claude') interrupt(session.id);
+		if (isAgentKind(session.kind)) agentInterrupt(session.id);
 		return json({ ok: true });
 	}
 
 	const text: string = body.text ?? '';
 
-	if (session.kind === 'claude') {
+	if (isAgentKind(session.kind)) {
 		const images = parseImages(body.images);
 		if (!text.trim() && images.length === 0) error(400, 'empty prompt');
 		const meta =
 			typeof body.answersFor === 'string'
 				? { answersFor: body.answersFor, answers: Array.isArray(body.answers) ? body.answers : undefined }
 				: undefined;
-		// no running guard: a message sent mid-turn is queued and runs next
-		sendMessage(session.id, text, images.length ? images : undefined, meta);
+		// no running guard: a message sent mid-turn is queued (claude) or restarts
+		// the turn (per-turn agents)
+		agentSend(session, text, images.length ? images : undefined, meta);
 		return json({ ok: true, status: 'running' });
 	}
 

@@ -1,8 +1,15 @@
 <script lang="ts">
 	import type { NewSessionPreset, Project, SessionKind } from '$lib/types';
-	import { Bot, Terminal } from '@lucide/svelte';
+	import { Bot, Terminal, Sparkles, Braces } from '@lucide/svelte';
 	import { goto } from '$app/navigation';
 	import PathInput from './PathInput.svelte';
+
+	const KIND_OPTIONS = [
+		{ id: 'claude', label: 'Claude', icon: Bot },
+		{ id: 'pi', label: 'pi', icon: Sparkles },
+		{ id: 'codex', label: 'codex', icon: Braces },
+		{ id: 'shell', label: 'Shell', icon: Terminal }
+	] as const;
 
 	let { open = $bindable(false), preset = null }: { open?: boolean; preset?: NewSessionPreset | null } =
 		$props();
@@ -16,6 +23,7 @@
 	let customCwd = $state('');
 	let title = $state('');
 	let model = $state('');
+	let provider = $state('');
 	let yolo = $state(true);
 	let worktreeMode = $state<WorktreeMode>('new');
 	let worktreeModeDirty = $state(false);
@@ -68,10 +76,10 @@
 	const finalCwd = $derived(worktreeMode === 'existing' ? existingWorktreeDir : effectiveCwd);
 	const titleRequired = $derived(kind === 'claude');
 
-	// Worktree mode defaults to "new" for claude (branch off and work in isolation)
+	// Worktree mode defaults to "new" for agents (branch off and work in isolation)
 	// and "none" for shells (run right in the project), until the user overrides.
 	$effect(() => {
-		if (!worktreeModeDirty) worktreeMode = kind === 'claude' ? 'new' : 'none';
+		if (!worktreeModeDirty) worktreeMode = kind === 'shell' ? 'none' : 'new';
 	});
 
 	function setMode(m: WorktreeMode) {
@@ -160,11 +168,12 @@
 					kind,
 					cwd: finalCwd,
 					title: title.trim() || undefined,
-					model: model || undefined,
+					model: model.trim() || undefined,
+					provider: kind === 'pi' && provider.trim() ? provider.trim() : undefined,
 					permissionMode:
 						kind === 'claude' ? (yolo ? 'bypassPermissions' : 'acceptEdits') : undefined,
 					command: kind === 'shell' && command.trim() ? command.trim() : undefined,
-					prompt: kind === 'claude' && prompt.trim() ? prompt.trim() : undefined,
+					prompt: kind !== 'shell' && prompt.trim() ? prompt.trim() : undefined,
 					worktree:
 						worktreeMode === 'new' && branch.trim()
 							? { branch: branch.trim(), newBranch, base: base || undefined }
@@ -193,18 +202,14 @@
 			<h3 class="mb-4 text-lg font-semibold">New session</h3>
 
 			<div class="join mb-4 w-full">
-				<button
-					class="btn join-item flex-1 {kind === 'claude' ? 'btn-primary' : ''}"
-					onclick={() => (kind = 'claude')}
-				>
-					<Bot size={16} /> Claude
-				</button>
-				<button
-					class="btn join-item flex-1 {kind === 'shell' ? 'btn-primary' : ''}"
-					onclick={() => (kind = 'shell')}
-				>
-					<Terminal size={16} /> Shell
-				</button>
+				{#each KIND_OPTIONS as k (k.id)}
+					<button
+						class="btn join-item flex-1 px-2 {kind === k.id ? 'btn-primary' : ''}"
+						onclick={() => (kind = k.id)}
+					>
+						<k.icon size={16} /> <span class="hidden sm:inline">{k.label}</span>
+					</button>
+				{/each}
 			</div>
 
 			<fieldset class="fieldset">
@@ -300,19 +305,47 @@
 				{/if}
 			</fieldset>
 
-			{#if kind === 'claude'}
+			{#if kind === 'shell'}
 				<fieldset class="fieldset">
-					<legend class="fieldset-legend">Claude</legend>
-					<select class="select w-full" bind:value={model}>
-						<option value="">default model</option>
-						<option value="opus">opus</option>
-						<option value="sonnet">sonnet</option>
-						<option value="haiku">haiku</option>
-					</select>
-					<label class="label cursor-pointer justify-start gap-2">
-						<input type="checkbox" class="checkbox checkbox-sm" bind:checked={yolo} />
-						<span>YOLO mode (bypass permissions)</span>
-					</label>
+					<legend class="fieldset-legend">Shell</legend>
+					<input
+						class="input w-full"
+						placeholder="command (optional, default: your shell)"
+						bind:value={command}
+					/>
+				</fieldset>
+			{:else}
+				<fieldset class="fieldset">
+					<legend class="fieldset-legend">{kind}</legend>
+					{#if kind === 'claude'}
+						<select class="select w-full" bind:value={model}>
+							<option value="">default model</option>
+							<option value="opus">opus</option>
+							<option value="sonnet">sonnet</option>
+							<option value="haiku">haiku</option>
+						</select>
+						<label class="label cursor-pointer justify-start gap-2">
+							<input type="checkbox" class="checkbox checkbox-sm" bind:checked={yolo} />
+							<span>YOLO mode (bypass permissions)</span>
+						</label>
+					{:else if kind === 'pi'}
+						<input
+							class="input w-full"
+							placeholder="provider (optional, e.g. anthropic, google)"
+							bind:value={provider}
+						/>
+						<input
+							class="input w-full"
+							placeholder="model (optional, pi pattern or id)"
+							bind:value={model}
+						/>
+					{:else}
+						<input
+							class="input w-full"
+							placeholder="model (optional, e.g. gpt-5-codex)"
+							bind:value={model}
+						/>
+					{/if}
 					<textarea
 						class="textarea w-full"
 						rows="3"
@@ -323,15 +356,6 @@
 					{#if selectedProject?.template && !promptDirty}
 						<p class="text-xs opacity-50">prefilled from {selectedProject.name} template</p>
 					{/if}
-				</fieldset>
-			{:else}
-				<fieldset class="fieldset">
-					<legend class="fieldset-legend">Shell</legend>
-					<input
-						class="input w-full"
-						placeholder="command (optional, default: your shell)"
-						bind:value={command}
-					/>
 				</fieldset>
 			{/if}
 

@@ -76,10 +76,13 @@
 			>
 				<Menu size={16} />
 			</button>
-			{#if session.kind === 'claude'}
-				<Bot size={16} class="shrink-0 opacity-70" />
-			{:else}
+			{#if session.kind === 'shell'}
 				<Terminal size={16} class="shrink-0 opacity-70" />
+			{:else}
+				<Bot size={16} class="shrink-0 opacity-70" />
+			{/if}
+			{#if session.kind !== 'claude' && session.kind !== 'shell'}
+				<span class="badge badge-ghost badge-sm shrink-0">{session.kind}</span>
 			{/if}
 			<div class="flex min-w-0 flex-1 items-baseline gap-2">
 				<span class="truncate font-medium">{session.title}</span>
@@ -94,10 +97,10 @@
 		</div>
 
 		<div class="min-h-0 flex-1">
-			{#if session.kind === 'claude'}
-				<ClaudeView {session} />
-			{:else}
+			{#if session.kind === 'shell'}
 				<ShellView {session} />
+			{:else}
+				<ClaudeView {session} />
 			{/if}
 		</div>
 	</div>

@@ -61,17 +61,17 @@
 								: ''}"
 							title={s.title}
 						>
-							{#if s.kind === 'claude'}
-								<Bot size={13} class="shrink-0 opacity-60" />
-							{:else}
+							{#if s.kind === 'shell'}
 								<Terminal size={13} class="shrink-0 opacity-60" />
+							{:else}
+								<Bot size={13} class="shrink-0 opacity-60" />
 							{/if}
 							<span class="min-w-0 flex-1 truncate text-sm">{s.title}</span>
 							{#if s.worktree}
 								<GitBranch size={11} class="shrink-0 opacity-40" />
 							{/if}
 						</a>
-						{#if s.kind === 'claude' && s.worktree}
+						{#if s.kind !== 'shell' && s.worktree}
 							<button
 								class="btn btn-ghost btn-xs"
 								onclick={() => onShellHere(s)}

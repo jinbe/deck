@@ -5,8 +5,11 @@ import crypto from 'node:crypto';
 
 const dataDir = process.env.DECK_DATA ?? path.join(os.homedir(), '.deck');
 export const transcriptsDir = path.join(dataDir, 'transcripts');
+// Per-session resume files for per-turn agents (pi session files, etc).
+export const agentSessionsDir = path.join(dataDir, 'agent-sessions');
 
 fs.mkdirSync(transcriptsDir, { recursive: true });
+fs.mkdirSync(agentSessionsDir, { recursive: true });
 
 const tokenFile = path.join(dataDir, 'token');
 
