@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+# Fallow gate: review changed files for newly introduced dead code, complexity,
+# and duplication (new-only, so pre-existing findings don't block). Skips quietly
+# if pnpm/fallow isn't available.
+command -v pnpm >/dev/null 2>&1 || exit 0
+UPSTREAM="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
+if [ -n "$UPSTREAM" ]; then
+	BASE="$(git merge-base "$UPSTREAM" HEAD 2>/dev/null || echo "$UPSTREAM")"
+else
+	BASE="main"
+fi
+pnpm exec fallow audit --base "$BASE" --quiet --gate-marker pre-commit

@@ -8,7 +8,8 @@
 		"dev": "vite dev",
 		"build": "vite build",
 		"preview": "vite preview",
-		"prepare": "svelte-kit sync || echo ''",
+		"prepare": "svelte-kit sync || echo '' ; husky || true",
+		"audit": "fallow audit",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
 	},
@@ -20,6 +21,8 @@
 		"@types/node": "^25.9.2",
 		"@types/web-push": "^3.6.4",
 		"daisyui": "^5.5.23",
+		"fallow": "^2.96.0",
+		"husky": "^9.1.7",
 		"svelte": "^5.55.2",
 		"svelte-check": "^4.4.6",
 		"tailwindcss": "^4.2.2",
