@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { agentSessionsDir } from '../config';
+import { isFlagSafe } from './args';
 import type { AgentDriver, TurnContext } from './types';
 import {
 	assistantBlocks,
@@ -23,10 +24,11 @@ export const piDriver: AgentDriver = {
 	buildTurn(session, message) {
 		const sessionFile = path.join(agentSessionsDir, `pi-${session.id}.jsonl`);
 		const args = ['-p', '--mode', 'json', '--session', sessionFile];
-		if (session.provider) args.push('--provider', session.provider);
-		if (session.model) args.push('--model', session.model);
-		args.push(message);
-		return { cmd: 'pi', args };
+		// Drop provider/model that could smuggle a leading-dash flag (pi has no `--`).
+		if (isFlagSafe(session.provider)) args.push('--provider', session.provider!);
+		if (isFlagSafe(session.model)) args.push('--model', session.model!);
+		// The prompt goes via stdin so it can never be parsed as a pi flag.
+		return { cmd: 'pi', args, stdin: message };
 	},
 
 	handleLine(line: AnyObj, ctx: TurnContext) {

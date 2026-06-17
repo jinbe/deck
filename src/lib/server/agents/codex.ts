@@ -1,3 +1,4 @@
+import { isFlagSafe } from './args';
 import type { AgentDriver, TurnContext } from './types';
 import { assistantBlocks, assistantText, deckError, resultEvent, toolResultEvent, toolUseBlock } from './events';
 
@@ -13,10 +14,11 @@ export const codexDriver: AgentDriver = {
 
 	buildTurn(session, message, resumeId) {
 		const flags = ['--json', '--sandbox', 'workspace-write', '--skip-git-repo-check'];
-		if (session.model) flags.push('-m', session.model);
+		if (isFlagSafe(session.model)) flags.push('-m', session.model!);
+		// `--` stops codex parsing the prompt as a flag.
 		const args = resumeId
-			? ['exec', 'resume', resumeId, ...flags, message]
-			: ['exec', ...flags, message];
+			? ['exec', 'resume', resumeId, ...flags, '--', message]
+			: ['exec', ...flags, '--', message];
 		return { cmd: 'codex', args };
 	},
 
