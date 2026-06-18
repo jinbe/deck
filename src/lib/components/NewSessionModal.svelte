@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isAgentKind } from '$lib/types';
 	import type { NewSessionPreset, Project, SessionKind } from '$lib/types';
 	import { Bot, Terminal, Sparkles, Braces } from '@lucide/svelte';
 	import { goto } from '$app/navigation';
@@ -74,7 +75,7 @@
 	const effectiveCwd = $derived(cwd === '__custom' ? customCwd : cwd);
 	const selectedProject = $derived(projects.find((p) => p.path === cwd));
 	const finalCwd = $derived(worktreeMode === 'existing' ? existingWorktreeDir : effectiveCwd);
-	const titleRequired = $derived(kind === 'claude');
+	const titleRequired = $derived(isAgentKind(kind));
 
 	// Worktree mode defaults to "new" for agents (branch off and work in isolation)
 	// and "none" for shells (run right in the project), until the user overrides.
@@ -239,7 +240,7 @@
 						placeholder="template first prompt for this project (optional)"
 						bind:value={newProjectTemplate}
 					></textarea>
-					<p class="text-xs opacity-50">placeholders: [title] [branch] [cwd]</p>
+					<p class="text-xs opacity-50">placeholders: [title] [branch-name] [base-branch] [cwd]</p>
 				{/if}
 			</fieldset>
 
@@ -355,6 +356,8 @@
 					></textarea>
 					{#if selectedProject?.template && !promptDirty}
 						<p class="text-xs opacity-50">prefilled from {selectedProject.name} template</p>
+					{:else}
+						<p class="text-xs opacity-50">placeholders: [title] [branch-name] [base-branch] [cwd]</p>
 					{/if}
 				</fieldset>
 			{/if}
