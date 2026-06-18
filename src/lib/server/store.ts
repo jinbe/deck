@@ -76,6 +76,7 @@ export function addSource(projectPath: string, source: IssueSource): Project | u
 	if (!project) return undefined;
 	project.sources = [...(project.sources ?? []), source];
 	writeJson(PROJECTS_FILE, projects);
+	invalidateIssues(projectPath);
 	return project;
 }
 

@@ -1,16 +1,11 @@
 <script lang="ts">
 	import type { Issue, IssueSourceType, Project } from '$lib/types';
+	import { ISSUE_BADGE } from '$lib/issues';
 	import { RefreshCw, TriangleAlert, ChevronRight } from '@lucide/svelte';
 
 	let { project, onpick }: { project: Project; onpick: (issue: Issue) => void } = $props();
 
 	type SourceError = { sourceId: string; message: string };
-
-	const BADGE: Record<IssueSourceType, { label: string; cls: string }> = {
-		github: { label: 'GH', cls: 'badge-neutral' },
-		linear: { label: 'LIN', cls: 'badge-primary' },
-		clickup: { label: 'CU', cls: 'badge-secondary' }
-	};
 
 	let issues = $state<Issue[]>([]);
 	let errors = $state<SourceError[]>([]);
@@ -63,7 +58,7 @@
 					class="btn join-item btn-xs {filter === f ? 'btn-active' : ''}"
 					onclick={() => (filter = f as 'all' | IssueSourceType)}
 				>
-					{f === 'all' ? 'All' : BADGE[f as IssueSourceType].label}
+					{f === 'all' ? 'All' : ISSUE_BADGE[f as IssueSourceType].label}
 				</button>
 			{/each}
 		</div>
@@ -90,8 +85,8 @@
 				<div class="border-b border-base-300 last:border-0">
 					<div class="flex items-center gap-2 py-1.5">
 						<button class="flex min-w-0 flex-1 items-center gap-2 text-left" onclick={() => onpick(issue)}>
-							<span class="badge badge-sm {BADGE[issue.sourceType].cls} shrink-0">
-								{BADGE[issue.sourceType].label}
+							<span class="badge badge-sm {ISSUE_BADGE[issue.sourceType].cls} shrink-0">
+								{ISSUE_BADGE[issue.sourceType].label}
 							</span>
 							<span class="shrink-0 font-mono text-xs opacity-70">{issue.id}</span>
 							<span class="min-w-0 flex-1 truncate text-sm">{issue.title}</span>

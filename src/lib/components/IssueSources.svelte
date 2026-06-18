@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { IssueSource, IssueSourceType, Project } from '$lib/types';
+	import { ISSUE_BADGE } from '$lib/issues';
 	import { Plus, Trash2, X } from '@lucide/svelte';
 
 	let { project, onchanged }: { project: Project; onchanged: () => void } = $props();
@@ -8,12 +9,6 @@
 	type LinearState = { id: string; name: string; type: string };
 	type CuNamed = { id: string; name: string };
 	type CuStatus = { status: string; type: string };
-
-	const BADGE: Record<IssueSourceType, { label: string; cls: string }> = {
-		github: { label: 'GH', cls: 'badge-neutral' },
-		linear: { label: 'LIN', cls: 'badge-primary' },
-		clickup: { label: 'CU', cls: 'badge-secondary' }
-	};
 
 	function summary(s: IssueSource): string {
 		if (s.type === 'github') return `${s.owner}/${s.repo}`;
@@ -228,7 +223,7 @@
 		<div class="mb-2 space-y-1">
 			{#each project.sources as s (s.id)}
 				<div class="flex items-center gap-2 rounded-box border border-base-300 px-2 py-1 text-sm">
-					<span class="badge badge-sm {BADGE[s.type].cls}">{BADGE[s.type].label}</span>
+					<span class="badge badge-sm {ISSUE_BADGE[s.type].cls}">{ISSUE_BADGE[s.type].label}</span>
 					<span class="min-w-0 flex-1 truncate">{summary(s)}</span>
 					<button class="btn btn-ghost btn-xs" onclick={() => remove(s)} aria-label="Remove source">
 						<Trash2 size={13} />
@@ -254,7 +249,7 @@
 	{:else}
 		<div class="rounded-box border border-dashed border-base-300 p-3">
 			<div class="mb-2 flex items-center gap-2">
-				<span class="badge badge-sm {BADGE[addType].cls}">{BADGE[addType].label}</span>
+				<span class="badge badge-sm {ISSUE_BADGE[addType].cls}">{ISSUE_BADGE[addType].label}</span>
 				<span class="text-sm font-medium">Add {addType} source</span>
 				<div class="flex-1"></div>
 				<button class="btn btn-ghost btn-xs" onclick={resetAdd} aria-label="Cancel"><X size={14} /></button>

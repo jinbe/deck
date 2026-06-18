@@ -9,21 +9,21 @@ type Built = { source: IssueSource; apiKey?: string };
 
 const str = (v: unknown) => String(v ?? '').trim();
 const strArray = (v: unknown) => (Array.isArray(v) ? v.map(str).filter(Boolean) : []);
-const require = (ok: boolean, msg: string) => {
+const need = (ok: boolean, msg: string) => {
 	if (!ok) error(400, msg);
 };
 
 function githubSource(id: string, b: Body): Built {
 	const owner = str(b.owner);
 	const repo = str(b.repo);
-	require(!!owner && !!repo, 'owner and repo are required');
+	need(!!owner && !!repo, 'owner and repo are required');
 	return { source: { id, type: 'github', owner, repo } };
 }
 
 function linearSource(id: string, b: Body): Built {
 	const apiKey = str(b.apiKey);
 	const teamId = str(b.teamId);
-	require(!!apiKey && !!teamId, 'apiKey and teamId are required');
+	need(!!apiKey && !!teamId, 'apiKey and teamId are required');
 	return {
 		source: { id, type: 'linear', teamId, teamName: str(b.teamName), assigneeEmail: str(b.assigneeEmail), stateIds: strArray(b.stateIds) },
 		apiKey
@@ -32,7 +32,7 @@ function linearSource(id: string, b: Body): Built {
 
 function clickupSource(id: string, b: Body): Built {
 	const f = { apiKey: str(b.apiKey), teamId: str(b.teamId), spaceId: str(b.spaceId), listId: str(b.listId), assigneeUserId: Number(b.assigneeUserId) };
-	require([f.apiKey, f.teamId, f.spaceId, f.listId, f.assigneeUserId].every(Boolean), 'apiKey, teamId, spaceId, listId and assigneeUserId are required');
+	need([f.apiKey, f.teamId, f.spaceId, f.listId, f.assigneeUserId].every(Boolean), 'apiKey, teamId, spaceId, listId and assigneeUserId are required');
 	const folderId = str(b.folderId);
 	return {
 		source: {

@@ -6,12 +6,11 @@
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import NewSessionModal from '$lib/components/NewSessionModal.svelte';
 	import { shortPath } from '$lib/time';
+	import { ISSUE_BADGE } from '$lib/issues';
 	import { ArrowLeft, Bot, Terminal, Menu, X, Plus } from '@lucide/svelte';
 
 	let { data }: PageProps = $props();
 	const session = $derived(data.session);
-
-	const ISSUE_BADGE = { github: 'GH', linear: 'LIN', clickup: 'CU' } as const;
 
 	let projects = $state<Project[]>([]);
 	let sessions = $state<DeckSession[]>([]);
@@ -134,13 +133,13 @@
 							target="_blank"
 							rel="noopener noreferrer"
 							class="badge badge-outline badge-sm link link-hover shrink-0 gap-1"
-							title="{ISSUE_BADGE[session.issue.source]} {session.issue.id}"
+							title="{ISSUE_BADGE[session.issue.source].label} {session.issue.id}"
 						>
-							{ISSUE_BADGE[session.issue.source]} {session.issue.id}
+							{ISSUE_BADGE[session.issue.source].label} {session.issue.id}
 						</a>
 					{:else}
 						<span class="badge badge-outline badge-sm shrink-0 gap-1">
-							{ISSUE_BADGE[session.issue.source]} {session.issue.id}
+							{ISSUE_BADGE[session.issue.source].label} {session.issue.id}
 						</span>
 					{/if}
 				{/if}

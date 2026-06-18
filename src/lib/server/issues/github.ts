@@ -8,8 +8,12 @@ import type { GithubSource, Issue, IssueBlocker } from '$lib/types';
 
 const exec = promisify(execFile);
 
+// Cap each gh call so a hung CLI (auth prompt, dead network) can't wedge the
+// request; both the issue list and the sub-issues query go through here.
+const GH_TIMEOUT_MS = 15_000;
+
 async function gh(args: string[]): Promise<string> {
-	const { stdout } = await exec('gh', args, { maxBuffer: 16 * 1024 * 1024 });
+	const { stdout } = await exec('gh', args, { maxBuffer: 16 * 1024 * 1024, timeout: GH_TIMEOUT_MS });
 	return stdout;
 }
 

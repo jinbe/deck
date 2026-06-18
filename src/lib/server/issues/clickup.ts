@@ -98,7 +98,8 @@ export async function fetchClickupIssues(source: ClickupSource, apiKey: string):
 // We resolve each unique blocker once to get its title + done state; closed ones
 // don't warn. Best-effort and shallow (direct waiting-on only), so any lookup
 // failure just drops that blocker rather than breaking the listing.
-const CU_DONE = 'closed';
+// ClickUp marks finished work as either the `closed` or `done` status type.
+const CU_DONE = new Set(['closed', 'done']);
 const BLOCKER_LOOKUP_CAP = 25;
 
 // The ids a task is waiting on (its own "waiting-on" dependency entries).
@@ -119,18 +120,19 @@ function collectWaitingOn(tasks: CuTask[]): { waitingOn: Map<string, string[]>; 
 	return { waitingOn, wanted };
 }
 
-// Resolve each blocker id to its title, or null when done/unreachable.
-async function lookupBlockers(apiKey: string, ids: string[]): Promise<Map<string, IssueBlocker | null>> {
-	const resolved = new Map<string, IssueBlocker | null>();
-	for (const id of ids) {
-		try {
-			const task = await cu<CuTask>(apiKey, `/task/${id}`);
-			resolved.set(id, task.status.type === CU_DONE ? null : { id: `#${id}`, title: task.name });
-		} catch {
-			resolved.set(id, null);
-		}
+// Resolve one blocker id to its title, or null when done/unreachable.
+async function lookupBlocker(apiKey: string, id: string): Promise<readonly [string, IssueBlocker | null]> {
+	try {
+		const task = await cu<CuTask>(apiKey, `/task/${id}`);
+		return [id, CU_DONE.has(task.status.type) ? null : { id: `#${id}`, title: task.name }];
+	} catch {
+		return [id, null];
 	}
-	return resolved;
+}
+
+// Resolve all blocker ids concurrently.
+async function lookupBlockers(apiKey: string, ids: string[]): Promise<Map<string, IssueBlocker | null>> {
+	return new Map(await Promise.all(ids.map((id) => lookupBlocker(apiKey, id))));
 }
 
 async function resolveBlockers(apiKey: string, tasks: CuTask[]): Promise<Map<string, IssueBlocker[]>> {
