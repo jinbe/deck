@@ -42,9 +42,13 @@ export function readJson<T>(file: string, fallback: T): T {
 	}
 }
 
-export function writeJson(file: string, value: unknown) {
+// `mode` (e.g. 0o600 for secrets) is applied to the temp file and survives the
+// rename. writeFileSync's mode is still subject to umask, so chmod explicitly
+// to guarantee it regardless of the process umask.
+export function writeJson(file: string, value: unknown, mode?: number) {
 	const target = path.join(dataDir, file);
 	const tmp = `${target}.tmp`;
 	fs.writeFileSync(tmp, JSON.stringify(value, null, '\t'));
+	if (mode !== undefined) fs.chmodSync(tmp, mode);
 	fs.renameSync(tmp, target);
 }
