@@ -4,9 +4,15 @@
 import type { ClickupSource, Issue, IssueBlocker } from '$lib/types';
 
 const CU_API = 'https://api.clickup.com/api/v2';
+// Cap each call so a stalled upstream can't wedge the request, especially with
+// concurrent blocker lookups fanning out.
+const CU_TIMEOUT_MS = 15_000;
 
 async function cu<T>(apiKey: string, path: string): Promise<T> {
-	const res = await fetch(`${CU_API}${path}`, { headers: { authorization: apiKey } });
+	const res = await fetch(`${CU_API}${path}`, {
+		headers: { authorization: apiKey },
+		signal: AbortSignal.timeout(CU_TIMEOUT_MS)
+	});
 	const text = await res.text();
 	if (!res.ok) throw new Error(`ClickUp API ${res.status}: ${text.slice(0, 300)}`);
 	return JSON.parse(text) as T;

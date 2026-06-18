@@ -18,30 +18,43 @@
 	const presentTypes = $derived([...new Set((project.sources ?? []).map((s) => s.type))]);
 	const visible = $derived(filter === 'all' ? issues : issues.filter((i) => i.sourceType === filter));
 
+	// Guards against a slow fetch for a previous project landing after a newer
+	// one and overwriting the current project's issues.
+	let loadSeq = 0;
+
 	async function load(refresh = false) {
+		const seq = ++loadSeq;
 		loading = true;
 		loadError = '';
 		try {
 			const res = await fetch(
 				`/api/issues?project=${encodeURIComponent(project.path)}${refresh ? '&refresh=1' : ''}`
 			);
+			if (seq !== loadSeq) return;
 			if (!res.ok) {
-				loadError = (await res.json()).message ?? 'failed to load issues';
+				const msg = (await res.json().catch(() => ({}))).message ?? 'failed to load issues';
+				if (seq !== loadSeq) return;
+				loadError = msg;
 				return;
 			}
 			const data = await res.json();
+			if (seq !== loadSeq) return;
 			issues = data.issues ?? [];
 			errors = data.errors ?? [];
 		} catch (e) {
+			if (seq !== loadSeq) return;
 			loadError = e instanceof Error ? e.message : 'failed to load issues';
 		} finally {
-			loading = false;
+			if (seq === loadSeq) loading = false;
 		}
 	}
 
-	// Reload whenever the bound project changes.
+	// Reload and reset the view whenever the bound project changes — a filter or
+	// expanded row from the previous project would otherwise hide issues here.
 	$effect(() => {
 		project.path;
+		filter = 'all';
+		expanded = null;
 		load();
 	});
 

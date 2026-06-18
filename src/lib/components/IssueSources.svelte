@@ -105,6 +105,12 @@
 	}
 
 	function loadLinearStates() {
+		// Re-selecting the placeholder option clears the team; don't call the API.
+		if (!linTeamId) {
+			linStates = [];
+			linStateIds = [];
+			return;
+		}
 		run(async () => {
 			linStates = await meta<LinearState[]>('linear', 'states', { teamId: linTeamId });
 			// Default to the "to do / up next" buckets (unstarted-typed states).
@@ -123,15 +129,33 @@
 	}
 
 	function loadSpaces() {
+		if (!cuTeamId) {
+			cuSpaces = [];
+			cuSpaceId = cuFolderId = cuListId = '';
+			cuFolders = cuLists = [];
+			cuStatuses = [];
+			cuSelected = [];
+			return;
+		}
 		run(async () => {
 			cuSpaces = await meta<CuNamed[]>('clickup', 'spaces', { teamId: cuTeamId });
 			cuSpaceId = cuFolderId = cuListId = '';
 			cuFolders = cuLists = [];
 			cuStatuses = [];
+			cuSelected = [];
 		});
 	}
 
 	function loadFoldersAndLists() {
+		if (!cuSpaceId) {
+			cuFolders = [];
+			cuLists = [];
+			cuFolderId = '';
+			cuListId = '';
+			cuStatuses = [];
+			cuSelected = [];
+			return;
+		}
 		run(async () => {
 			cuFolders = await meta<CuNamed[]>('clickup', 'folders', { spaceId: cuSpaceId });
 			cuFolderId = '';
@@ -150,6 +174,11 @@
 	}
 
 	function loadStatuses() {
+		if (!cuListId) {
+			cuStatuses = [];
+			cuSelected = [];
+			return;
+		}
 		run(async () => {
 			cuStatuses = await meta<CuStatus[]>('clickup', 'statuses', { listId: cuListId });
 			cuSelected = cuStatuses
@@ -208,16 +237,25 @@
 	}
 
 	async function remove(s: IssueSource) {
-		await fetch(
-			`/api/projects/sources?project=${encodeURIComponent(project.path)}&id=${encodeURIComponent(s.id)}`,
-			{ method: 'DELETE' }
-		);
-		onchanged();
+		await run(async () => {
+			const res = await fetch(
+				`/api/projects/sources?project=${encodeURIComponent(project.path)}&id=${encodeURIComponent(s.id)}`,
+				{ method: 'DELETE' }
+			);
+			if (!res.ok) {
+				throw new Error((await res.json().catch(() => ({})))?.message ?? 'failed to remove source');
+			}
+			onchanged();
+		});
 	}
 </script>
 
 <div class="mt-3">
 	<div class="mb-1 text-xs font-medium opacity-60">Issue sources</div>
+
+	{#if errorMsg}
+		<div class="alert alert-error mb-2 py-1 text-xs">{errorMsg}</div>
+	{/if}
 
 	{#if project.sources?.length}
 		<div class="mb-2 space-y-1">
@@ -364,10 +402,6 @@
 						</button>
 					</div>
 				{/if}
-			{/if}
-
-			{#if errorMsg}
-				<div class="alert alert-error mt-2 py-1 text-xs">{errorMsg}</div>
 			{/if}
 		</div>
 	{/if}

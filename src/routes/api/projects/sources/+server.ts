@@ -1,6 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import crypto from 'node:crypto';
 import type { RequestHandler } from './$types';
+import { objectBody } from '$lib/server/http';
 import { listProjects, addSource, removeSource, setSecret } from '$lib/server/store';
 import type { IssueSource } from '$lib/types';
 
@@ -32,7 +33,10 @@ function linearSource(id: string, b: Body): Built {
 
 function clickupSource(id: string, b: Body): Built {
 	const f = { apiKey: str(b.apiKey), teamId: str(b.teamId), spaceId: str(b.spaceId), listId: str(b.listId), assigneeUserId: Number(b.assigneeUserId) };
-	need([f.apiKey, f.teamId, f.spaceId, f.listId, f.assigneeUserId].every(Boolean), 'apiKey, teamId, spaceId, listId and assigneeUserId are required');
+	need(
+		[f.apiKey, f.teamId, f.spaceId, f.listId].every(Boolean) && Number.isFinite(f.assigneeUserId),
+		'apiKey, teamId, spaceId, listId and assigneeUserId are required'
+	);
 	const folderId = str(b.folderId);
 	return {
 		source: {
@@ -70,7 +74,7 @@ function buildSource(id: string, body: Body): Built {
 // POST /api/projects/sources — add a source to a project. Generates the id,
 // stashes any apiKey in secrets.json, and stores the (secret-free) source.
 export const POST: RequestHandler = async ({ request }) => {
-	const body = await request.json();
+	const body = await objectBody(request);
 	const path = str(body.projectPath);
 	if (!listProjects().some((p) => p.path === path)) error(404, 'project not found');
 

@@ -92,6 +92,13 @@
 		showPicker = false;
 	}
 
+	// Drop any picked issue when the project changes — an issue from one project
+	// must not ride along into a session created under another.
+	$effect(() => {
+		cwd;
+		pickedIssue = null;
+	});
+
 	// Worktree mode defaults to "new" for agents (branch off and work in isolation)
 	// and "none" for shells (run right in the project), until the user overrides.
 	$effect(() => {

@@ -4,6 +4,8 @@
 import type { Issue, LinearSource } from '$lib/types';
 
 const LINEAR_API = 'https://api.linear.app/graphql';
+// Cap each call so a stalled upstream can't wedge the request.
+const LINEAR_TIMEOUT_MS = 15_000;
 
 async function graphql<T>(
 	apiKey: string,
@@ -13,7 +15,8 @@ async function graphql<T>(
 	const res = await fetch(LINEAR_API, {
 		method: 'POST',
 		headers: { 'content-type': 'application/json', authorization: apiKey },
-		body: JSON.stringify({ query, variables })
+		body: JSON.stringify({ query, variables }),
+		signal: AbortSignal.timeout(LINEAR_TIMEOUT_MS)
 	});
 	const text = await res.text();
 	if (!res.ok) throw new Error(`Linear API ${res.status}: ${text.slice(0, 300)}`);
@@ -59,6 +62,9 @@ export function linearStates(apiKey: string, teamId: string): Promise<LinearStat
 	).then((d) => d.team.states.nodes.sort((a, b) => a.position - b.position));
 }
 
+// Quick-pick cap: first 100, matching the GitHub (`--limit 100`) and ClickUp
+// list paths. The picker is a shortlist, not an exhaustive browser, so the
+// three providers cap rather than paginate.
 const ISSUES_QUERY = `query($f: IssueFilter) {
 	issues(filter: $f, first: 100) {
 		nodes {

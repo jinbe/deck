@@ -59,12 +59,13 @@ export function updateProject(path: string, patch: Partial<Project>): Project | 
 
 export function removeProject(path: string) {
 	const project = listProjects().find((p) => p.path === path);
-	// Removing a project takes its sources' secrets with it.
-	for (const s of project?.sources ?? []) deleteSecret(s.id);
+	// Persist the removal first; only then drop the sources' secrets, so a failed
+	// write can't strand a still-listed project with its keys already gone.
 	writeJson(
 		PROJECTS_FILE,
 		listProjects().filter((p) => p.path !== path)
 	);
+	for (const s of project?.sources ?? []) deleteSecret(s.id);
 	invalidateIssues(path);
 }
 

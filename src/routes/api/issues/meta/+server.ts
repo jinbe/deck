@@ -1,5 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { objectBody } from '$lib/server/http';
 import { linearMe, linearTeams, linearStates } from '$lib/server/issues/linear';
 import {
 	clickupMe,
@@ -47,7 +48,7 @@ async function run(handler: Handler, apiKey: string, body: Body) {
 // add-source UI can cascade (me → teams → states / spaces → folders → lists →
 // statuses) before anything is persisted.
 export const POST: RequestHandler = async ({ request }) => {
-	const body: Body = await request.json();
+	const body = await objectBody(request);
 	const apiKey = s(body.apiKey).trim();
 	if (!apiKey) error(400, 'apiKey required');
 
