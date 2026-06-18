@@ -25,7 +25,10 @@ export const GET: RequestHandler = async ({ params }) => {
 				}
 			};
 
-			for (const event of readTranscript(id)) send('transcript', event);
+			// One batched frame for the whole stored history, then live events one
+			// at a time. Replaying per-line made the client rebuild its event array
+			// (and rescan it) once per line — O(n²) on long sessions.
+			send('snapshot', readTranscript(id));
 			send('status', agentTurnRunning(id) ? 'running' : session.status);
 
 			const onEvent = (event: unknown) => send('transcript', event);

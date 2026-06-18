@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import type { DeckSession } from '$lib/types';
 	import Linked from './Linked.svelte';
 	import ToolCall from './ToolCall.svelte';
@@ -20,6 +21,16 @@
 
 	type Attachment = { media_type: string; data: string; url: string };
 	let attachments = $state<Attachment[]>([]);
+
+	// Render only the tail at first, then widen the window in the background so
+	// opening a long session paints immediately instead of mounting thousands of
+	// nodes up front. `start` is the absolute index of the first rendered event,
+	// which we also use as the keyed-each key so widening reuses existing nodes.
+	const INITIAL_WINDOW = 60;
+	const HYDRATE_CHUNK = 250;
+	let limit = $state(INITIAL_WINDOW);
+	const start = $derived(Math.max(0, events.length - limit));
+	const visible = $derived(events.slice(start));
 
 	// Pair tool_result blocks back to their originating tool_use by id.
 	const resultsById = $derived.by(() => {
@@ -66,6 +77,16 @@
 
 	$effect(() => {
 		const source = new EventSource(`/api/sessions/${encodeURIComponent(session.id)}/events`);
+		// Whole stored history in one frame: set it once (also dedupes on reconnect,
+		// where the old per-line replay used to re-append the entire transcript).
+		source.addEventListener('snapshot', async (e) => {
+			events = JSON.parse(e.data);
+			limit = INITIAL_WINDOW;
+			liveText = '';
+			await tick();
+			forceScroll();
+			hydrateRest();
+		});
 		source.addEventListener('transcript', (e) => {
 			const ev = JSON.parse(e.data);
 			if (ev.type === 'stream_event') {
@@ -74,6 +95,7 @@
 			}
 			if (ev.type === 'assistant') liveText = '';
 			events = [...events, ev];
+			limit += 1; // keep the new event in view without dropping a tail row
 			maybeScroll();
 		});
 		source.addEventListener('status', (e) => {
@@ -96,6 +118,8 @@
 	function onScroll() {
 		if (!scroller) return;
 		atBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120;
+		// Scrolling toward the top: make sure older history is being filled in.
+		if (scroller.scrollTop < 400) hydrateRest();
 	}
 
 	function maybeScroll() {
@@ -105,6 +129,36 @@
 	function forceScroll() {
 		scroller?.scrollTo({ top: scroller.scrollHeight });
 		atBottom = true;
+	}
+
+	const idle: (cb: () => void) => void =
+		typeof requestIdleCallback === 'function'
+			? (cb) => requestIdleCallback(() => cb(), { timeout: 200 })
+			: (cb) => setTimeout(cb, 16);
+
+	// Widen the window by `by` older rows. They mount above the viewport, so re-pin
+	// by the distance to the bottom: a bottom-anchored view stays pinned, and a
+	// scrolled-up reader keeps the same messages in place instead of jumping.
+	async function growWindow(by: number) {
+		if (limit >= events.length) return;
+		const gap = scroller ? scroller.scrollHeight - scroller.scrollTop : 0;
+		limit = Math.min(events.length, limit + by);
+		await tick();
+		if (scroller) scroller.scrollTop = scroller.scrollHeight - gap;
+	}
+
+	let hydrating = false;
+	function hydrateRest() {
+		if (hydrating || limit >= events.length) return;
+		hydrating = true;
+		const step = () => {
+			if (limit >= events.length) {
+				hydrating = false;
+				return;
+			}
+			growWindow(HYDRATE_CHUNK).then(() => idle(step));
+		};
+		idle(step);
 	}
 
 	function toBase64(buf: ArrayBuffer): string {
@@ -212,7 +266,7 @@
 		onscroll={onScroll}
 		class="min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3"
 	>
-		{#each events as event, i (i)}
+		{#each visible as event, i (start + i)}
 			{#if event.type === 'deck.user'}
 				<div class="chat chat-end">
 					<div class="chat-bubble chat-bubble-primary max-w-[85%] break-words whitespace-pre-wrap">
