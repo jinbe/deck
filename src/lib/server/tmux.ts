@@ -17,6 +17,15 @@ async function tmux(...args: string[]): Promise<string> {
 	return stdout;
 }
 
+// Last non-empty render per pane. capture-pane only sees tmux's live screen plus
+// scrollback, both of which a program can erase: dev servers (vite, esbuild, bun)
+// emit ESC[3J on every rebuild to wipe scrollback, and full-screen TUIs sit on
+// the alternate screen. Right after such a clear the capture is blank even though
+// the process is alive, so a still-running server reads as dead. Kept on
+// globalThis so it survives dev-server HMR. Evicted when the session is killed.
+const g = globalThis as { __deckPaneBuf?: Map<string, string> };
+const paneBuf = (g.__deckPaneBuf ??= new Map<string, string>());
+
 export async function listTmuxSessions(): Promise<TmuxSession[]> {
 	try {
 		const out = await tmux(
@@ -51,6 +60,7 @@ export async function createTmuxSession(name: string, cwd: string, command?: str
 }
 
 export async function killTmuxSession(name: string) {
+	paneBuf.delete(name);
 	await tmux('kill-session', '-t', `=${name}`);
 }
 
@@ -63,9 +73,26 @@ export async function hasTmuxSession(name: string): Promise<boolean> {
 	}
 }
 
-export async function snapshotPane(name: string, lines = 500): Promise<string> {
+async function snapshotPane(name: string, lines = 500): Promise<string> {
 	// -e keeps SGR escape sequences so the client can render ANSI colors.
 	return tmux('capture-pane', '-e', '-p', '-t', `=${name}:`, '-S', `-${lines}`);
+}
+
+// Capture that tolerates program-side screen/scrollback clears. Returns the live
+// capture when there's something on it, otherwise the last non-empty render with
+// `cleared: true` so the UI can show the running process's prior output instead of
+// a blank pane that looks dead.
+export async function stableSnapshot(
+	name: string,
+	lines = 500
+): Promise<{ text: string; cleared: boolean }> {
+	const text = (await snapshotPane(name, lines)).replace(/\s+$/, '');
+	if (text) {
+		paneBuf.set(name, text);
+		return { text, cleared: false };
+	}
+	const prev = paneBuf.get(name);
+	return prev ? { text: prev, cleared: true } : { text: '', cleared: false };
 }
 
 // key is a tmux key name like 'C-c', 'Escape', 'Up'

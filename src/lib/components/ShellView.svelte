@@ -7,18 +7,30 @@
 
 	let text = $state('');
 	let dead = $state(false);
+	let cleared = $state(false);
+	let loaded = $state(false);
+	let connected = $state(true);
 	let input = $state('');
 	let autoRefresh = $state(true);
 	let scroller: HTMLDivElement | undefined = $state();
 
 	async function refresh() {
-		const res = await fetch(`/api/sessions/${encodeURIComponent(session.id)}/snapshot`);
+		let res: Response;
+		try {
+			res = await fetch(`/api/sessions/${encodeURIComponent(session.id)}/snapshot`);
+		} catch {
+			connected = false; // server momentarily unreachable (e.g. dev-server restart)
+			return;
+		}
+		connected = true;
 		if (!res.ok) return;
 		const data = await res.json();
 		const atBottom =
 			!scroller || scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 40;
 		text = data.text;
 		dead = data.dead;
+		cleared = !!data.cleared;
+		loaded = true;
 		if (atBottom) queueMicrotask(() => scroller?.scrollTo({ top: scroller.scrollHeight }));
 	}
 
@@ -57,10 +69,17 @@
 </script>
 
 <div class="flex h-full min-h-0 flex-col">
+	{#if !connected}
+		<div class="mb-2 text-xs text-warning">reconnecting…</div>
+	{:else if cleared}
+		<div class="mb-2 text-xs text-base-content/60">
+			the program cleared the screen; showing last output (session still running)
+		</div>
+	{/if}
 	<div
 		bind:this={scroller}
 		class="terminal-output min-h-0 flex-1 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-3"
-	><AnsiText text={text || '(empty)'} /></div>
+	><AnsiText text={text || (loaded ? '(empty)' : 'connecting…')} /></div>
 
 	<div class="mt-3 space-y-2">
 		<div class="flex items-center gap-2">
