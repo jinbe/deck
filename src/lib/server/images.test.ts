@@ -1,12 +1,21 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterAll } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
 // images.ts derives its directory from DECK_DATA at import, so point it at a
-// throwaway dir before the module (and the config it imports) loads.
-process.env.DECK_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'deck-images-'));
+// throwaway dir before the module (and the config it imports) loads. Restore the
+// env and remove the dir afterwards so nothing leaks to other suites in the worker.
+const originalDataDir = process.env.DECK_DATA;
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deck-images-'));
+process.env.DECK_DATA = tmpDir;
 const { persistImage, readImage } = await import('./images');
+
+afterAll(() => {
+	if (originalDataDir === undefined) delete process.env.DECK_DATA;
+	else process.env.DECK_DATA = originalDataDir;
+	fs.rmSync(tmpDir, { recursive: true, force: true });
+});
 
 // 1x1 transparent PNG.
 const PNG =
