@@ -58,6 +58,18 @@ describe('parseAnsi', () => {
 		expect(joined).not.toContain(ESC);
 	});
 
+	it('drops CSI sequences with non-letter final bytes (bracketed paste)', () => {
+		const segs = parseAnsi(`a${ESC}[200~paste${ESC}[201~b`);
+		const joined = segs.map((s) => s.text).join('');
+		expect(joined).toBe('apasteb');
+		expect(joined).not.toContain('~');
+	});
+
+	it('drops private-mode CSI toggles', () => {
+		const segs = parseAnsi(`x${ESC}[?2004hy${ESC}[?25lz`);
+		expect(segs.map((s) => s.text).join('')).toBe('xyz');
+	});
+
 	it('keeps styling across a stripped escape', () => {
 		const segs = parseAnsi(`${ESC}[32ma${ESC}[Kb`);
 		expect(segs.every((s) => s.fg === '#4e9a06')).toBe(true);

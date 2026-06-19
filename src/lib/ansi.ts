@@ -84,13 +84,19 @@ function applySgr(state: State, codes: number[]) {
 	}
 }
 
-// One pass handles everything: alternative 1 (group 1 = params) is an SGR colour
-// code we interpret; the other alternatives are stray escapes — OSC strings
-// (hyperlinks/titles) and other CSI/escape codes (cursor moves) — which we drop
-// so they don't leak into the rendered text. Because every escape is consumed by
-// the regex, the text between matches is already clean; no per-segment scrubbing.
+// One pass handles everything. The alternatives, in order:
+//  1. SGR colour code (group 1 = params) — interpreted into segment styling.
+//  2. OSC string (hyperlinks/titles), BEL- or ST-terminated — dropped.
+//  3. Any other CSI (cursor moves, private modes, bracketed paste): params,
+//     intermediates, then a final byte in the full 0x40-0x7E range so `~`-style
+//     terminators (e.g. ESC[200~) don't leak. The final byte stays optional so a
+//     capture truncated mid-escape is still stripped rather than half-rendered.
+//  4. Charset designators / stray ESC]/( / ) leftovers — dropped.
+// Every escape is consumed here, so the text between matches is already clean and
+// needs no per-segment scrubbing.
 // eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[([0-9;]*)m|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[[\]()][0-9;?]*[A-Za-z]?/g;
+const ANSI =
+	/\x1b\[([0-9;]*)m|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?]*[ -/]*[@-~]?|\x1b[\]()][0-9;?]*[A-Za-z]?/g;
 
 export function parseAnsi(input: string): AnsiSegment[] {
 	const segments: AnsiSegment[] = [];
