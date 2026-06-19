@@ -7,34 +7,64 @@ const SESSIONS_FILE = 'sessions.json';
 const PROJECTS_FILE = 'projects.json';
 const SECRETS_FILE = 'secrets.json';
 
+// In-memory cache of the sessions store. This module is the sole writer of
+// sessions.json, so every mutation here invalidates the cache and reads
+// repopulate it lazily. Avoids a full readFileSync + JSON.parse on each poll,
+// which the session list and monitor hit constantly (see #9).
+let sessionsCache: DeckSession[] | null = null;
+let sessionsById: Map<string, DeckSession> | null = null;
+
+// sessions.ts hooks its own list memo here so any store write also drops it,
+// without store.ts importing sessions.ts (that would be an import cycle).
+let onSessionsMutated: (() => void) | null = null;
+export function setSessionsMutatedHook(cb: () => void) {
+	onSessionsMutated = cb;
+}
+
+function loadSessions(): DeckSession[] {
+	if (!sessionsCache) {
+		sessionsCache = readJson<DeckSession[]>(SESSIONS_FILE, []);
+		sessionsById = new Map(sessionsCache.map((s) => [s.id, s]));
+	}
+	return sessionsCache;
+}
+
+function writeSessions(sessions: DeckSession[]) {
+	writeJson(SESSIONS_FILE, sessions);
+	sessionsCache = null;
+	sessionsById = null;
+	onSessionsMutated?.();
+}
+
+// Returns the shared cached array; callers must treat it (and its sessions) as
+// read-only and mutate only through updateSession/saveSession/removeSession,
+// which is the contract the in-memory cache relies on.
 export function listStoredSessions(): DeckSession[] {
-	return readJson<DeckSession[]>(SESSIONS_FILE, []);
+	return loadSessions();
 }
 
 export function getStoredSession(id: string): DeckSession | undefined {
-	return listStoredSessions().find((s) => s.id === id);
+	loadSessions();
+	return sessionsById!.get(id);
 }
 
 export function saveSession(session: DeckSession) {
-	const sessions = listStoredSessions().filter((s) => s.id !== session.id);
+	const sessions = loadSessions().filter((s) => s.id !== session.id);
 	sessions.push(session);
-	writeJson(SESSIONS_FILE, sessions);
+	writeSessions(sessions);
 }
 
 export function updateSession(id: string, patch: Partial<DeckSession>): DeckSession | undefined {
-	const sessions = listStoredSessions();
+	const sessions = loadSessions();
 	const session = sessions.find((s) => s.id === id);
 	if (!session) return undefined;
 	Object.assign(session, patch);
-	writeJson(SESSIONS_FILE, sessions);
+	writeSessions(sessions);
 	return session;
 }
 
 export function removeSession(id: string) {
-	writeJson(
-		SESSIONS_FILE,
-		listStoredSessions().filter((s) => s.id !== id)
-	);
+	writeSessions(loadSessions().filter((s) => s.id !== id));
 }
 
 export function listProjects(): Project[] {
