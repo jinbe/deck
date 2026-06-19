@@ -84,15 +84,26 @@ function applySgr(state: State, codes: number[]) {
 	}
 }
 
+// One pass handles everything. The alternatives, in order:
+//  1. SGR colour code (group 1 = params) — interpreted into segment styling.
+//  2. OSC string (hyperlinks/titles), BEL- or ST-terminated — dropped.
+//  3. Any other CSI (cursor moves, private modes, bracketed paste): params,
+//     intermediates, then a final byte in the full 0x40-0x7E range so `~`-style
+//     terminators (e.g. ESC[200~) don't leak. The final byte stays optional so a
+//     capture truncated mid-escape is still stripped rather than half-rendered.
+//  4. Charset designators / stray ESC]/( / ) leftovers — dropped.
+// Every escape is consumed here, so the text between matches is already clean and
+// needs no per-segment scrubbing.
 // eslint-disable-next-line no-control-regex
-const SGR = /\x1b\[([0-9;]*)m/g;
+const ANSI =
+	/\x1b\[([0-9;]*)m|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?]*[ -/]*[@-~]?|\x1b[\]()][0-9;?]*[A-Za-z]?/g;
 
 export function parseAnsi(input: string): AnsiSegment[] {
 	const segments: AnsiSegment[] = [];
 	const state = fresh();
 	let last = 0;
 	let m: RegExpExecArray | null;
-	SGR.lastIndex = 0;
+	ANSI.lastIndex = 0;
 
 	const push = (text: string) => {
 		if (!text) return;
@@ -108,21 +119,14 @@ export function parseAnsi(input: string): AnsiSegment[] {
 		});
 	};
 
-	while ((m = SGR.exec(input)) !== null) {
+	while ((m = ANSI.exec(input)) !== null) {
 		push(input.slice(last, m.index));
-		const codes = m[1] === '' ? [0] : m[1].split(';').map((n) => parseInt(n, 10) || 0);
-		applySgr(state, codes);
+		if (m[1] !== undefined) {
+			const codes = m[1] === '' ? [0] : m[1].split(';').map((n) => parseInt(n, 10) || 0);
+			applySgr(state, codes);
+		}
 		last = m.index + m[0].length;
 	}
 	push(input.slice(last));
-	// Drop other stray escape sequences (cursor moves, OSC hyperlinks/titles) so
-	// they don't leak into the rendered text.
-	for (const s of segments) {
-		s.text = s.text
-			// eslint-disable-next-line no-control-regex
-			.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
-			// eslint-disable-next-line no-control-regex
-			.replace(/\x1b[\[\]()][0-9;?]*[A-Za-z]?/g, '');
-	}
 	return segments;
 }
