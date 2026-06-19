@@ -39,6 +39,15 @@ describe('session store', () => {
 		expect(readFile().map((s) => s.id)).toEqual(['a']);
 	});
 
+	it('getStoredSession returns a copy, so mutating it cannot corrupt the cache', () => {
+		store.saveSession(session('a'));
+		const snap = store.getStoredSession('a')!;
+		snap.status = 'error';
+		snap.title = 'mutated';
+		expect(store.getStoredSession('a')?.status).toBe('idle');
+		expect(store.getStoredSession('a')?.title).toBe('a');
+	});
+
 	it('updateSession is a keyed merge that preserves other fields and persists', () => {
 		store.saveSession(session('a'));
 		store.updateSession('a', { claudeSessionId: 'resume-1' });
