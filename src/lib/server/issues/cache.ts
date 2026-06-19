@@ -57,6 +57,10 @@ function startFetch(projectPath: string, compute: () => Promise<IssuesResult>): 
 	cache.set(projectPath, slot);
 	slot.promise.then(
 		() => {
+			// No identity guard needed here, unlike the reject path: this only flips
+			// the slot's own flag and never writes the result back to the map, so a
+			// slot that invalidateIssues evicted mid-flight stays evicted and the next
+			// call refetches. Keep it write-back-free if this ever grows.
 			slot.settled = true;
 		},
 		() => {
