@@ -6,7 +6,7 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import { transcriptsDir } from './config';
-import { getStoredSession, updateSession } from './store';
+import { getStoredSession, setSessionStatus, updateSession } from './store';
 import { ensureMcp, mcpUrl } from './mcp';
 import { rejectAsk } from './ask';
 import { notify } from './push';
@@ -106,7 +106,7 @@ export function appendEvent(id: string, event: Record<string, unknown>) {
 }
 
 export function setStatus(id: string, status: 'running' | 'idle' | 'error') {
-	updateSession(id, { status, lastActiveAt: Date.now() });
+	setSessionStatus(id, status, Date.now());
 	bus.emit(`status:${id}`, status);
 }
 

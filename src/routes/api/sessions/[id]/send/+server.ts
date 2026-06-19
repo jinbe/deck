@@ -43,6 +43,12 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			typeof body.answersFor === 'string'
 				? { answersFor: body.answersFor, answers: Array.isArray(body.answers) ? body.answers : undefined }
 				: undefined;
+		// Anchor recency durably at send time. The hot-path setStatus('running')
+		// only updates the in-memory record (the read path derives running live),
+		// so without this an abnormal exit before the turn's terminal idle flush
+		// would lose this session's place in the recency sort. Once per user
+		// message is cheap, unlike the per-message_start churn we removed.
+		updateSession(session.id, { lastActiveAt: Date.now() });
 		// no running guard: a message sent mid-turn is queued (claude) or restarts
 		// the turn (per-turn agents)
 		agentSend(session, text, images.length ? images : undefined, meta);

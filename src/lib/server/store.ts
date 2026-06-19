@@ -1,4 +1,4 @@
-import type { DeckSession, IssueSource, Project } from '$lib/types';
+import type { DeckSession, IssueSource, Project, SessionStatus } from '$lib/types';
 import { readJson, writeJson } from './config';
 import { invalidateIssues } from './issues/cache';
 import { DEMO, demoProjects } from './demo';
@@ -7,34 +7,64 @@ const SESSIONS_FILE = 'sessions.json';
 const PROJECTS_FILE = 'projects.json';
 const SECRETS_FILE = 'secrets.json';
 
-export function listStoredSessions(): DeckSession[] {
-	return readJson<DeckSession[]>(SESSIONS_FILE, []);
+// sessions.json is the hot store: setStatus fires on every message_start and
+// turn boundary. Keep the authoritative copy in memory (loaded once, surviving
+// HMR via globalThis like the event bus and proc maps) so reads are O(1) and
+// every write is a single keyed update flushed by one writer, with no per-event
+// read-modify-write of the whole array and no lost-update race between
+// concurrently streaming sessions. Writes replace the entry (never mutate in
+// place) so an already-returned snapshot stays stable.
+const g = globalThis as { __deckSessions?: Map<string, DeckSession> };
+function sessionMap(): Map<string, DeckSession> {
+	return (g.__deckSessions ??= new Map(
+		readJson<DeckSession[]>(SESSIONS_FILE, []).map((s) => [s.id, s])
+	));
 }
 
+function flushSessions() {
+	writeJson(SESSIONS_FILE, [...sessionMap().values()]);
+}
+
+export function listStoredSessions(): DeckSession[] {
+	return [...sessionMap().values()];
+}
+
+// Returns the live cached record, not a copy. Never mutate it in place; route
+// changes through updateSession/setSessionStatus so the write is flushed and the
+// no-mutate invariant that keeps prior snapshots stable holds.
 export function getStoredSession(id: string): DeckSession | undefined {
-	return listStoredSessions().find((s) => s.id === id);
+	return sessionMap().get(id);
 }
 
 export function saveSession(session: DeckSession) {
-	const sessions = listStoredSessions().filter((s) => s.id !== session.id);
-	sessions.push(session);
-	writeJson(SESSIONS_FILE, sessions);
+	sessionMap().set(session.id, session);
+	flushSessions();
 }
 
 export function updateSession(id: string, patch: Partial<DeckSession>): DeckSession | undefined {
-	const sessions = listStoredSessions();
-	const session = sessions.find((s) => s.id === id);
+	const session = sessionMap().get(id);
 	if (!session) return undefined;
-	Object.assign(session, patch);
-	writeJson(SESSIONS_FILE, sessions);
-	return session;
+	const updated = { ...session, ...patch };
+	sessionMap().set(id, updated);
+	flushSessions();
+	return updated;
 }
 
 export function removeSession(id: string) {
-	writeJson(
-		SESSIONS_FILE,
-		listStoredSessions().filter((s) => s.id !== id)
-	);
+	if (sessionMap().delete(id)) flushSessions();
+}
+
+// Volatile run status. The list/SSE read path derives running/idle live from
+// the process map (see sessions.ts), so a persisted `running` is never trusted
+// across a read, which makes the per-message_start disk write pure churn. Keep
+// the in-memory record current (so a sibling session's flush still snapshots the
+// latest value) but only hit disk for the terminal idle/error states, which
+// clear a prior error and advance lastActiveAt.
+export function setSessionStatus(id: string, status: SessionStatus, lastActiveAt: number) {
+	const session = sessionMap().get(id);
+	if (!session) return;
+	sessionMap().set(id, { ...session, status, lastActiveAt });
+	if (status !== 'running') flushSessions();
 }
 
 export function listProjects(): Project[] {
