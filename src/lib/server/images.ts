@@ -28,6 +28,12 @@ function sessionDir(id: string): string {
 	return path.join(imagesDir, id.replace(/[^a-zA-Z0-9_-]/g, '_'));
 }
 
+// Canonical media type for a stored extension, so the transcript ref and the
+// served content type always agree (.jpg covers both image/jpeg and image/jpg).
+function mediaTypeForExt(ext: string): string {
+	return ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+}
+
 // Content-addressed by sha256 so re-sending the same image is a no-op write and
 // the filename alone is enough to read it back.
 export function persistImage(id: string, media_type: string, data: string): StoredImage {
@@ -38,8 +44,15 @@ export function persistImage(id: string, media_type: string, data: string): Stor
 	const dir = sessionDir(id);
 	fs.mkdirSync(dir, { recursive: true });
 	const dest = path.join(dir, file);
-	if (!fs.existsSync(dest)) fs.writeFileSync(dest, buf);
-	return { file, media_type };
+	// The bytes are content-addressed, so an existing file already holds them.
+	// 'wx' fails rather than rewriting; swallow EEXIST instead of a check-then-act
+	// stat that two concurrent sends could both pass.
+	try {
+		fs.writeFileSync(dest, buf, { flag: 'wx' });
+	} catch (e) {
+		if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+	}
+	return { file, media_type: mediaTypeForExt(ext) };
 }
 
 // Reads a stored attachment. The filename is validated against the
@@ -48,8 +61,7 @@ export function readImage(id: string, file: string): { data: Buffer; media_type:
 	if (!FILE_RE.test(file)) return null;
 	try {
 		const data = fs.readFileSync(path.join(sessionDir(id), file));
-		const ext = file.slice(file.lastIndexOf('.') + 1);
-		return { data, media_type: ext === 'jpg' ? 'image/jpeg' : `image/${ext}` };
+		return { data, media_type: mediaTypeForExt(file.slice(file.lastIndexOf('.') + 1)) };
 	} catch {
 		return null;
 	}

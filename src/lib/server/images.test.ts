@@ -38,6 +38,12 @@ describe('persistImage / readImage', () => {
 		expect(readImage('c_test', ref.file)!.media_type).toBe('image/jpeg');
 	});
 
+	it('normalises the stored media type so the ref matches what is served', () => {
+		const ref = persistImage('c_test', 'image/jpg', PNG);
+		expect(ref.media_type).toBe('image/jpeg');
+		expect(readImage('c_test', ref.file)!.media_type).toBe(ref.media_type);
+	});
+
 	it('sanitizes the session id consistently on write and read', () => {
 		const ref = persistImage('a/b../c', 'image/png', PNG);
 		expect(readImage('a/b../c', ref.file)).not.toBeNull();
