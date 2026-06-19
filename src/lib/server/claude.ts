@@ -6,7 +6,7 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import { transcriptsDir } from './config';
-import { appendLine } from './transcript-writer';
+import { appendLine, whenDrained } from './transcript-writer';
 import { getStoredSession, updateSession } from './store';
 import { ensureMcp, mcpUrl } from './mcp';
 import { rejectAsk } from './ask';
@@ -101,6 +101,17 @@ export function readTranscriptRange(id: string, before: number, limit: number): 
 	return { start, events: all.slice(start, end) };
 }
 
+// Emit on the bus from a deferred continuation. A throwing listener must not
+// escape the .finally chains below (it would surface as an unhandled rejection,
+// where the old synchronous emit threw into a catchable caller frame); log it.
+function emit(channel: string, payload: unknown) {
+	try {
+		bus.emit(channel, payload);
+	} catch (err) {
+		console.error(`[deck] bus emit failed (${channel}):`, err);
+	}
+}
+
 export function appendEvent(id: string, event: Record<string, unknown>) {
 	// Persist off the event loop (no more blocking appendFileSync), then emit only
 	// once the write settles. Emitting after the write keeps the live bus
@@ -109,12 +120,17 @@ export function appendEvent(id: string, event: Record<string, unknown>) {
 	// miss it. A write that fails still emits, so live clients aren't starved.
 	appendLine(transcriptPath(id), JSON.stringify(event) + '\n')
 		.catch((err) => console.error(`[deck] transcript append failed for ${id}:`, err))
-		.finally(() => bus.emit(`event:${id}`, event));
+		.finally(() => emit(`event:${id}`, event));
 }
 
 export function setStatus(id: string, status: 'running' | 'idle' | 'error') {
 	updateSession(id, { status, lastActiveAt: Date.now() });
-	bus.emit(`status:${id}`, status);
+	// The store update above is what a (re)connecting client reads, so status is
+	// durable immediately. Defer only the live emit behind this session's pending
+	// transcript writes: appendEvent emits its event after the write settles, so a
+	// caller doing appendEvent(x) then setStatus(y) keeps event-before-status order
+	// on the bus (e.g. the result footer lands before the spinner clears).
+	whenDrained(transcriptPath(id)).finally(() => emit(`status:${id}`, status));
 }
 
 // Record the user's answer to a question on the transcript so the UI can show

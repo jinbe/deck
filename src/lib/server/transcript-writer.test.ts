@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { appendLine } from './transcript-writer';
+import { appendLine, whenDrained } from './transcript-writer';
 
 let dir: string;
 beforeEach(() => {
@@ -45,5 +45,20 @@ describe('appendLine', () => {
 		await Promise.all([appendLine(a, '1\n'), appendLine(b, '2\n'), appendLine(a, '3\n')]);
 		expect(read(a)).toEqual(['1', '3']);
 		expect(read(b)).toEqual(['2']);
+	});
+});
+
+describe('whenDrained', () => {
+	it('resolves after the file’s queued appends settle', async () => {
+		const f = path.join(dir, 'drain.jsonl');
+		const order: string[] = [];
+		const write = appendLine(f, 'x\n').then(() => order.push('write'));
+		const drain = whenDrained(f).then(() => order.push('drain'));
+		await Promise.all([write, drain]);
+		expect(order).toEqual(['write', 'drain']);
+	});
+
+	it('resolves when the file has no queued writes', async () => {
+		await expect(whenDrained(path.join(dir, 'idle.jsonl'))).resolves.toBeUndefined();
 	});
 });

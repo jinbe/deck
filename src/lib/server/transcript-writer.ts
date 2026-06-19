@@ -27,3 +27,10 @@ export function appendLine(file: string, line: string): Promise<void> {
 	});
 	return write;
 }
+
+// Resolve once every append currently queued for this file has settled. Lets a
+// caller order a later bus emit (e.g. a status change) after the events already
+// in flight, so the pair keeps call order on the bus without blocking the loop.
+export function whenDrained(file: string): Promise<void> {
+	return Promise.resolve(tails.get(file)).then(() => {});
+}
