@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs';
 import path from 'node:path';
+import { isFlagSafe } from './agents/args';
 
 const exec = promisify(execFile);
 
@@ -75,16 +76,23 @@ export async function createWorktree(
 	branch: string,
 	opts: { newBranch?: boolean; base?: string } = {}
 ): Promise<string> {
+	// branch/base reach git as ref arguments; a value starting with `-` would be
+	// parsed as a git flag (the flag-injection class isFlagSafe guards elsewhere).
+	// Two defenses: reject crafted refs here, and pass every positional arg after
+	// a `--` separator so nothing downstream (dir included) is read as an option.
+	if (!isFlagSafe(branch)) throw new Error(`unsafe branch name: ${branch}`);
+	if (opts.base !== undefined && !isFlagSafe(opts.base))
+		throw new Error(`unsafe base branch: ${opts.base}`);
 	const safe = branch.replace(/[^a-zA-Z0-9._/-]/g, '-').replace(/\//g, '-');
 	const dir = path.join(path.dirname(repo), `${path.basename(repo)}-worktrees`, safe);
 	if (fs.existsSync(dir)) return dir;
 	fs.mkdirSync(path.dirname(dir), { recursive: true });
 	const args = ['worktree', 'add'];
 	if (opts.newBranch) {
-		args.push('-b', branch, dir);
+		args.push('-b', branch, '--', dir);
 		if (opts.base) args.push(opts.base);
 	} else {
-		args.push(dir, branch);
+		args.push('--', dir, branch);
 	}
 	await git(repo, ...args);
 	return dir;
