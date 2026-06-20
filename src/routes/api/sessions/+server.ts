@@ -4,6 +4,7 @@ import type { RequestHandler } from './$types';
 import { isAgentKind, type SessionIssue, type SessionKind, type IssueSourceType } from '$lib/types';
 import { listSessions, createSession } from '$lib/server/sessions';
 import { createWorktree, isGitRepo } from '$lib/server/git';
+import { isFlagSafe } from '$lib/server/agents/args';
 import { agentSend } from '$lib/server/agents/dispatch';
 import { listProjects, updateProject } from '$lib/server/store';
 import { expandTilde } from '$lib/server/fsutil';
@@ -70,12 +71,27 @@ function rememberBase(repo: string, newBranch: boolean, base: string | undefined
 	if (listProjects().some((p) => p.path === repo)) updateProject(repo, { lastBase: base });
 }
 
+// A worktree ref is safe only if it is a string git won't read as a flag. The
+// request body is untyped JSON, so a non-string truthy value must 400, not throw
+// a 500 inside isFlagSafe's .startsWith.
+function isSafeRef(v: unknown): boolean {
+	return typeof v === 'string' && isFlagSafe(v);
+}
+
+// branch/base become git ref args; a leading dash is flag injection. createWorktree
+// guards the sink too; this is the boundary check that returns a clean 400.
+function assertRefsSafe(wt: WorktreeReq): void {
+	if (!isSafeRef(wt.branch)) error(400, 'invalid branch name');
+	if (wt.base && !isSafeRef(wt.base)) error(400, 'invalid base branch');
+}
+
 // Create the isolated worktree the session will run in.
 async function makeWorktree(
 	cwd: string,
 	wt: WorktreeReq
 ): Promise<{ cwd: string; worktree: Worktree }> {
 	if (!(await isGitRepo(cwd))) error(400, 'worktree requested but cwd is not a git repo');
+	assertRefsSafe(wt);
 	const repo = cwd;
 	const base = wt.base || undefined;
 	const dir = await createWorktree(repo, wt.branch!, { newBranch: wt.newBranch, base });
