@@ -62,9 +62,12 @@ export function clickupLists(
 	apiKey: string,
 	scope: { folderId?: string; spaceId?: string }
 ): Promise<CuNamed[]> {
+	if (!scope.folderId && !scope.spaceId) {
+		throw new Error('clickupLists requires a folderId or spaceId');
+	}
 	const path = scope.folderId
 		? `/folder/${seg(scope.folderId)}/list?archived=false`
-		: `/space/${seg(scope.spaceId ?? '')}/list?archived=false`;
+		: `/space/${seg(scope.spaceId!)}/list?archived=false`;
 	return cu<{ lists: CuNamed[] }>(apiKey, path).then((d) => d.lists ?? []);
 }
 

@@ -62,6 +62,12 @@ describe('clickup path-id encoding', () => {
 		expect(calls[0]).toBe(`${API}/space/${ENC}/list?archived=false`);
 	});
 
+	it('rejects a list scope with neither folder nor space', () => {
+		const calls = stubFetch(() => ({ lists: [] }));
+		expect(() => clickupLists('key', {})).toThrow(/folderId or spaceId/);
+		expect(calls).toHaveLength(0);
+	});
+
 	it('encodes the list id when reading statuses', async () => {
 		const calls = stubFetch(() => ({ statuses: [] }));
 		await clickupStatuses('key', NASTY);
