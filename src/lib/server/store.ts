@@ -1,4 +1,4 @@
-import type { DeckSession, IssueSource, Project, SessionStatus } from '$lib/types';
+import type { DeckSession, IssueSource, Project } from '$lib/types';
 import { readJson, writeJson } from './config';
 import { invalidateIssues } from './issues/cache';
 import { DEMO, demoProjects } from './demo';
@@ -76,7 +76,11 @@ export function removeSession(id: string) {
 // idle/error states are flushed (they clear a prior error and survive a
 // restart). A later write of the whole array can still carry an in-memory
 // `running` to disk, which is harmless because the read path downgrades it.
-export function setSessionStatus(id: string, status: SessionStatus, lastActiveAt: number) {
+export function setSessionStatus(
+	id: string,
+	status: 'running' | 'idle' | 'error',
+	lastActiveAt: number
+) {
 	loadSessions();
 	const session = sessionsById!.get(id);
 	if (!session) return;
