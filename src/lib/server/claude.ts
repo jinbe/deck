@@ -5,7 +5,7 @@ import spawn from 'cross-spawn';
 import { EventEmitter } from 'node:events';
 import { appendLine, whenDrained } from './transcript-writer';
 import { persistImage } from './images';
-import { getStoredSession, updateSession } from './store';
+import { getStoredSession, setSessionStatus, updateSession } from './store';
 import { ensureMcp, mcpUrl } from './mcp';
 import { rejectAsk } from './ask';
 import { notify } from './push';
@@ -67,12 +67,13 @@ export function appendEvent(id: string, event: Record<string, unknown>) {
 }
 
 export function setStatus(id: string, status: 'running' | 'idle' | 'error') {
-	updateSession(id, { status, lastActiveAt: Date.now() });
-	// The store update above is what a (re)connecting client reads, so status is
-	// durable immediately. Defer only the live emit behind this session's pending
-	// transcript writes: appendEvent emits its event after the write settles, so a
-	// caller doing appendEvent(x) then setStatus(y) keeps event-before-status order
-	// on the bus (e.g. the result footer lands before the spinner clears).
+	setSessionStatus(id, status, Date.now());
+	// The store update above applies immediately (in memory, and flushed for the
+	// terminal idle/error states), so a (re)connecting client reads the right
+	// status. Defer only the live emit behind this session's pending transcript
+	// writes: appendEvent emits its event after the write settles, so a caller
+	// doing appendEvent(x) then setStatus(y) keeps event-before-status order on
+	// the bus (e.g. the result footer lands before the spinner clears).
 	whenDrained(transcriptPath(id)).finally(() => emit(`status:${id}`, status));
 }
 

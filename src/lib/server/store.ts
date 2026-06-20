@@ -67,6 +67,28 @@ export function removeSession(id: string) {
 	writeSessions(loadSessions().filter((s) => s.id !== id));
 }
 
+// Volatile run status, written on every message_start and turn boundary. The
+// list/SSE read path derives running/idle live from the process map (see
+// sessions.ts agentStatus), so a persisted `running` is never trusted across a
+// read. That lets the hot per-message_start flip stay in memory: mutate the
+// cached record in place and bust the list memo so the new lastActiveAt shows up
+// on the next poll, but don't rewrite sessions.json. Only the terminal
+// idle/error states are flushed (they clear a prior error and survive a
+// restart). A later write of the whole array can still carry an in-memory
+// `running` to disk, which is harmless because the read path downgrades it.
+export function setSessionStatus(
+	id: string,
+	status: 'running' | 'idle' | 'error',
+	lastActiveAt: number
+) {
+	loadSessions();
+	const session = sessionsById!.get(id);
+	if (!session) return;
+	Object.assign(session, { status, lastActiveAt });
+	if (status === 'running') onSessionsMutated?.();
+	else writeSessions(sessionsCache!);
+}
+
 export function listProjects(): Project[] {
 	if (DEMO) return demoProjects();
 	return readJson<Project[]>(PROJECTS_FILE, []);

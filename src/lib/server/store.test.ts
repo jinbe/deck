@@ -8,6 +8,7 @@ import type { DeckSession } from '$lib/types';
 // module's config side effects (mkdir, token) and every read/write land there.
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deck-store-test-'));
 process.env.DECK_DATA = dataDir;
+const sessionsFile = path.join(dataDir, 'sessions.json');
 
 const {
 	listStoredSessions,
@@ -15,6 +16,7 @@ const {
 	saveSession,
 	updateSession,
 	removeSession,
+	setSessionStatus,
 	setSessionsMutatedHook
 } = await import('./store');
 
@@ -33,8 +35,16 @@ function shell(id: string): DeckSession {
 	};
 }
 
+function readFile(): DeckSession[] {
+	return JSON.parse(fs.readFileSync(sessionsFile, 'utf8'));
+}
+
 const sessionReads = (spy: ReturnType<typeof vi.spyOn>) =>
 	spy.mock.calls.filter((c: unknown[]) => String(c[0]).endsWith('sessions.json')).length;
+
+// writeJson commits with renameSync(tmp, target); the target ends in the file name.
+const sessionWrites = (spy: ReturnType<typeof vi.spyOn>) =>
+	spy.mock.calls.filter((c: unknown[]) => String(c[1]).endsWith('sessions.json')).length;
 
 describe('store session cache', () => {
 	it('reflects writes through getStoredSession', () => {
@@ -76,6 +86,42 @@ describe('store session cache', () => {
 			removeSession('h1');
 			expect(hook).toHaveBeenCalledTimes(3);
 		} finally {
+			setSessionsMutatedHook(() => {});
+		}
+	});
+
+	it('keeps a running flip in memory and only flushes terminal states', () => {
+		saveSession(shell('s1'));
+		const spy = vi.spyOn(fs, 'renameSync');
+		try {
+			setSessionStatus('s1', 'running', 100);
+			expect(getStoredSession('s1')?.status).toBe('running');
+			expect(getStoredSession('s1')?.lastActiveAt).toBe(100);
+			expect(sessionWrites(spy)).toBe(0); // running never touches disk
+
+			setSessionStatus('s1', 'idle', 200);
+			expect(sessionWrites(spy)).toBe(1); // terminal state is persisted
+			expect(readFile().find((s) => s.id === 's1')?.status).toBe('idle');
+
+			setSessionStatus('s1', 'error', 300);
+			expect(sessionWrites(spy)).toBe(2);
+			expect(readFile().find((s) => s.id === 's1')?.status).toBe('error');
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	it('busts the list memo on a running flip without writing', () => {
+		saveSession(shell('m1'));
+		const hook = vi.fn();
+		setSessionsMutatedHook(hook);
+		const spy = vi.spyOn(fs, 'renameSync');
+		try {
+			setSessionStatus('m1', 'running', 5);
+			expect(hook).toHaveBeenCalledTimes(1);
+			expect(sessionWrites(spy)).toBe(0);
+		} finally {
+			spy.mockRestore();
 			setSessionsMutatedHook(() => {});
 		}
 	});
