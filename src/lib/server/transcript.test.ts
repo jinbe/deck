@@ -155,4 +155,15 @@ describe('readTranscriptRange back-scroll', () => {
 		expect(readTranscriptRange(id, 50.7, 20.9)).toEqual({ start: 30, events: events.slice(30, 50) });
 		expect(readTranscriptRange(id, NaN, NaN)).toEqual({ start: 0, events: [] });
 	});
+
+	it('caps an oversized limit so the slice stays bounded', () => {
+		const big = 'caps';
+		const many = Array.from({ length: 1500 }, (_, i) => ev(i));
+		seed(big, many);
+		// limit far past RANGE_MAX (1000) must not read from index 0; the span is
+		// capped to the most recent 1000 before `before`.
+		const slice = readTranscriptRange(big, 1500, 1_000_000);
+		expect(slice.start).toBe(500);
+		expect(slice.events).toEqual(many.slice(500));
+	});
 });

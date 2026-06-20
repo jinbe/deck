@@ -54,7 +54,16 @@ function buildIndex(
 	if (cached && cached.size === stat.size && cached.mtimeMs === stat.mtimeMs) return cached;
 	const grew = !!cached && stat.size > cached.size;
 	const newlines = grew ? cached!.newlines : [];
-	scanNewlines(file, grew ? cached!.size : 0, stat.size, newlines);
+	const base = newlines.length;
+	try {
+		scanNewlines(file, grew ? cached!.size : 0, stat.size, newlines);
+	} catch (err) {
+		// A mid-scan I/O error must not leave the reused array half-extended while
+		// the cached entry's size/mtime stay stale: the next call would rescan from
+		// the old size and double-append. Roll back to the pre-scan length, rethrow.
+		newlines.length = base;
+		throw err;
+	}
 	return { size: stat.size, mtimeMs: stat.mtimeMs, newlines };
 }
 
@@ -190,6 +199,11 @@ export function snapshotFrames(id: string): { seq: number; n: number; data: stri
 	return frames;
 }
 
+// Upper bound on a single back-scroll request, well above the client's
+// HYDRATE_CHUNK (250). Without it a crafted ?limit= could read and parse from
+// index 0 on the request thread, the unbounded read this module exists to avoid.
+const RANGE_MAX = 1000;
+
 // A contiguous older slice [start, end) for lazy back-scroll, oldest-first.
 export function readTranscriptRange(
 	id: string,
@@ -200,9 +214,10 @@ export function readTranscriptRange(
 	if (!index) return { start: 0, events: [] };
 	const total = index.newlines.length;
 	// Coerce to integers: query params arrive as arbitrary numbers and a
-	// fractional index would land between lines and break the byte math.
+	// fractional index would land between lines and break the byte math. Cap the
+	// span so the slice stays bounded regardless of the requested limit.
 	const before0 = Number.isFinite(before) ? Math.floor(before) : 0;
-	const limit0 = Number.isFinite(limit) ? Math.floor(limit) : 0;
+	const limit0 = Math.min(Number.isFinite(limit) ? Math.floor(limit) : 0, RANGE_MAX);
 	const end = Math.max(0, Math.min(before0, total));
 	const start = Math.max(0, end - Math.max(0, limit0));
 	const events = readEvents(
