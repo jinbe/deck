@@ -170,7 +170,7 @@
 
 				{#if s.setup.length}
 					<div class="mt-2 space-y-1">
-						{#each s.setup as step (step.label)}
+						{#each s.setup as step, i (i)}
 							<div class="flex items-start gap-2 text-xs">
 								<span class="mt-0.5 shrink-0">
 									{#if stepIcon(step) === 'ok'}

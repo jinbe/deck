@@ -41,14 +41,16 @@
 	const hasServers = $derived(myServers.length > 0);
 
 	async function refresh() {
-		const [pRes, sRes, vRes] = await Promise.all([
+		// allSettled, not all: a single endpoint failure (e.g. /api/servers) must not
+		// abort the whole refresh and leave projects/sessions stale.
+		const [pRes, sRes, vRes] = await Promise.allSettled([
 			fetch('/api/projects'),
 			fetch('/api/sessions'),
 			fetch('/api/servers')
 		]);
-		if (pRes.ok) projects = await pRes.json();
-		if (sRes.ok) sessions = await sRes.json();
-		if (vRes.ok) serverStates = await vRes.json();
+		if (pRes.status === 'fulfilled' && pRes.value.ok) projects = await pRes.value.json();
+		if (sRes.status === 'fulfilled' && sRes.value.ok) sessions = await sRes.value.json();
+		if (vRes.status === 'fulfilled' && vRes.value.ok) serverStates = await vRes.value.json();
 	}
 
 	$effect(() => {

@@ -38,6 +38,12 @@ describe('parseDevConfig', () => {
 		).toThrow(/duplicate/);
 	});
 
+	it('rejects names that collide after tmux-name sanitization', () => {
+		expect(() =>
+			parseDevConfig({ servers: [{ name: 'web api', run: 'a' }, { name: 'web/api', run: 'b' }] })
+		).toThrow(/collide/);
+	});
+
 	it('rejects an uncompilable readyPattern', () => {
 		expect(() => parseDevConfig({ servers: [{ name: 'w', run: 'x', readyPattern: '(' }] })).toThrow();
 	});

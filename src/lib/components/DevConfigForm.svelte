@@ -81,8 +81,13 @@
 			.map((s) => ({ label: s.label.trim(), run: s.run.trim(), cwd: s.cwd?.trim() || undefined }));
 	}
 	function cleanPorts(ports: PortSpec[] | undefined): PortSpec[] {
+		// Match the API's zod contract (int, 1..65535) so a bad port fails here with
+		// inline feedback rather than as a server-side save error.
 		return (ports ?? [])
-			.filter((p) => Number(p.port) > 0)
+			.filter((p) => {
+				const n = Number(p.port);
+				return Number.isInteger(n) && n >= 1 && n <= 65535;
+			})
 			.map((p) => ({ port: Number(p.port), label: p.label?.trim() || undefined, primary: p.primary || undefined }));
 	}
 	function cleanServers(): ServerSpec[] {

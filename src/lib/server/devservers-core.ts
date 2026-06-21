@@ -32,11 +32,20 @@ const devConfigSchema = z.object({
 	servers: z.array(serverSchema).optional()
 });
 
+function sanitizeServerName(name: string): string {
+	return name.replace(/[^a-zA-Z0-9_-]/g, '-');
+}
+
+// Reject both raw duplicates and names that collapse to the same tmux session id
+// after sanitization (e.g. "web api" and "web/api" both become "web-api"), which
+// would otherwise make a lifecycle action target the wrong pane.
 function assertUniqueNames(servers: ServerSpec[]) {
-	const names = new Set<string>();
+	const seen = new Set<string>();
 	for (const s of servers) {
-		if (names.has(s.name)) throw new Error(`duplicate server name: ${s.name}`);
-		names.add(s.name);
+		const safe = sanitizeServerName(s.name);
+		if (seen.has(s.name)) throw new Error(`duplicate server name: ${s.name}`);
+		if (seen.has(safe)) throw new Error(`server names collide after sanitization: ${s.name}`);
+		seen.add(s.name).add(safe);
 	}
 }
 
@@ -60,10 +69,10 @@ export function parseDevConfig(raw: unknown): DevConfig {
 export const SERVER_TMUX_PREFIX = 'deck-srv-';
 
 // tmux session name for a server's dev pane. Session ids are already tmux-safe;
-// the server name is sanitised so an arbitrary config value can't break the name.
+// the server name is sanitised so an arbitrary config value can't break the name
+// (two names that sanitise alike are rejected at validation, see assertUniqueNames).
 export function serverTmuxName(sessionId: string, serverName: string): string {
-	const safe = serverName.replace(/[^a-zA-Z0-9_-]/g, '-');
-	return `${SERVER_TMUX_PREFIX}${sessionId}-${safe}`;
+	return `${SERVER_TMUX_PREFIX}${sessionId}-${sanitizeServerName(serverName)}`;
 }
 
 function primaryPort(ports: PortSpec[]): PortSpec | undefined {

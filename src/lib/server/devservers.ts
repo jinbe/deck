@@ -458,6 +458,7 @@ export async function restartServer(sessionId: string, serverName: string): Prom
 	const epoch = inst.epoch;
 	inst.stopRequested = false;
 	inst.starting = true;
+	inst.error = undefined; // don't leak a prior failure into the relaunch
 	try {
 		await killName(serverTmuxName(sessionId, serverName));
 		await launch(inst, ctx);
@@ -472,7 +473,12 @@ export async function restartServer(sessionId: string, serverName: string): Prom
 async function killServerPanes(sessionId: string) {
 	const prefix = `${SERVER_TMUX_PREFIX}${sessionId}-`;
 	for (const t of await listTmuxSessions()) {
-		if (t.name.startsWith(prefix)) await killTmuxSession(t.name);
+		if (!t.name.startsWith(prefix)) continue;
+		try {
+			await killTmuxSession(t.name);
+		} catch {
+			// best-effort sweep: one failed kill must not strand the rest
+		}
 	}
 }
 
