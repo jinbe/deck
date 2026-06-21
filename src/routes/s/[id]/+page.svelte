@@ -3,6 +3,7 @@
 	import type { DeckSession, NewSessionPreset, Project } from '$lib/types';
 	import ClaudeView from '$lib/components/ClaudeView.svelte';
 	import ShellView from '$lib/components/ShellView.svelte';
+	import DiffView from '$lib/components/DiffView.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import NewSessionModal from '$lib/components/NewSessionModal.svelte';
 	import { shortPath } from '$lib/time';
@@ -18,6 +19,16 @@
 	let preset = $state<NewSessionPreset | null>(null);
 	let sidebarOpen = $state(false);
 
+	// The Changes tab (worktree diff). Shown only when the session's cwd is a git
+	// repo. The badge count and the diff itself auto-refresh on turn end; the live
+	// status comes from the existing /api/sessions poll, not a separate stream.
+	let tab = $state<'main' | 'changes'>('main');
+	let gitRepo = $state(false);
+	let changedCount = $state<number | null>(null);
+	const liveStatus = $derived(
+		sessions.find((s) => s.id === session.id)?.status ?? session.status
+	);
+
 	async function refresh() {
 		const [pRes, sRes] = await Promise.all([fetch('/api/projects'), fetch('/api/sessions')]);
 		if (pRes.ok) projects = await pRes.json();
@@ -28,6 +39,41 @@
 		refresh();
 		const interval = setInterval(refresh, 5000);
 		return () => clearInterval(interval);
+	});
+
+	// Lightweight badge/visibility probe: meta only, no patch build.
+	async function loadDiffMeta() {
+		try {
+			const res = await fetch(`/api/sessions/${encodeURIComponent(session.id)}/diff?meta=1`);
+			if (!res.ok) return;
+			const data = await res.json();
+			gitRepo = !!data.git;
+			changedCount = data.git ? (data.meta?.fileCount ?? 0) : null;
+			if (!gitRepo && tab === 'changes') tab = 'main';
+		} catch {
+			// transient failure: keep the previous badge state
+		}
+	}
+
+	// Reset and re-probe when the viewed session changes.
+	let metaLoadedFor = '';
+	$effect(() => {
+		if (metaLoadedFor === session.id) return;
+		metaLoadedFor = session.id;
+		tab = 'main';
+		gitRepo = false;
+		changedCount = null;
+		void loadDiffMeta();
+	});
+
+	// Refresh the badge when a turn ends (running -> idle/error). When the Changes
+	// tab is open, DiffView does its own running->idle refresh and reports the
+	// count back via onCount, so skip the probe here to avoid doing the diff twice.
+	let prevLive = ''; // last seen liveStatus, for the running -> idle edge
+	$effect(() => {
+		const s = liveStatus;
+		if (prevLive === 'running' && s !== 'running' && tab !== 'changes') void loadDiffMeta();
+		prevLive = s;
 	});
 
 	function openNew() {
@@ -153,11 +199,42 @@
 			</button>
 		</div>
 
+		{#if gitRepo}
+			<div class="join mb-2 shrink-0 self-start">
+				<button
+					class="btn join-item btn-sm {tab === 'main' ? 'btn-active' : 'btn-ghost'}"
+					onclick={() => (tab = 'main')}
+					aria-pressed={tab === 'main'}
+				>
+					{session.kind === 'shell' ? 'Terminal' : 'Chat'}
+				</button>
+				<button
+					class="btn join-item btn-sm gap-1 {tab === 'changes' ? 'btn-active' : 'btn-ghost'}"
+					onclick={() => (tab = 'changes')}
+					aria-pressed={tab === 'changes'}
+				>
+					Changes
+					{#if changedCount}<span class="badge badge-neutral badge-sm">{changedCount}</span>{/if}
+				</button>
+			</div>
+		{/if}
+
 		<div class="min-h-0 flex-1">
-			{#if session.kind === 'shell'}
-				<ShellView {session} />
-			{:else}
-				<ClaudeView {session} />
+			<div class="h-full" class:hidden={tab === 'changes'}>
+				{#if session.kind === 'shell'}
+					<ShellView {session} />
+				{:else}
+					<ClaudeView {session} />
+				{/if}
+			</div>
+			{#if tab === 'changes'}
+				<DiffView
+					{session}
+					{liveStatus}
+					onCount={(n) => {
+						if (n !== null) changedCount = n;
+					}}
+				/>
 			{/if}
 		</div>
 	</div>

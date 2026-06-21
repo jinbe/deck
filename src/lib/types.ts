@@ -25,8 +25,10 @@ export interface DeckSession {
 	tmuxName?: string;
 	managed?: boolean;
 	attached?: boolean;
-	// set when deck created this session inside a git worktree
-	worktree?: { repo: string; branch: string; createdBranch: boolean };
+	// set when deck created this session inside a git worktree. `base` is the ref
+	// the worktree was branched from, kept so the diff viewer can resolve "changes
+	// since base" without guessing.
+	worktree?: { repo: string; branch: string; createdBranch: boolean; base?: string };
 	// set when the session was started from an issue picked in the new-session modal
 	issue?: SessionIssue;
 }

@@ -132,7 +132,7 @@ export async function createSession(input: {
 	provider?: string;
 	permissionMode?: DeckSession['permissionMode'];
 	command?: string;
-	worktree?: { repo: string; branch: string; createdBranch: boolean };
+	worktree?: { repo: string; branch: string; createdBranch: boolean; base?: string };
 	issue?: SessionIssue;
 }): Promise<DeckSession> {
 	const id = newId(input.kind);
