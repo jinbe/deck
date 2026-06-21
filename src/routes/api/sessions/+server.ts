@@ -13,7 +13,7 @@ const KINDS: SessionKind[] = ['claude', 'pi', 'codex', 'shell'];
 const ISSUE_SOURCES: IssueSourceType[] = ['github', 'linear', 'clickup'];
 
 type WorktreeReq = { branch?: string; newBranch?: boolean; base?: string };
-type Worktree = { repo: string; branch: string; createdBranch: boolean };
+type Worktree = { repo: string; branch: string; createdBranch: boolean; base?: string };
 
 // Substitute [title]/[branch-name]/[base-branch]/[cwd]/[issue_id]/[issue_url] in
 // a first prompt. [branch] is kept as a back-compat alias for [branch-name].
@@ -96,7 +96,7 @@ async function makeWorktree(
 	const base = wt.base || undefined;
 	const dir = await createWorktree(repo, wt.branch!, { newBranch: wt.newBranch, base });
 	rememberBase(repo, !!wt.newBranch, base);
-	return { cwd: dir, worktree: { repo, branch: wt.branch!, createdBranch: !!wt.newBranch } };
+	return { cwd: dir, worktree: { repo, branch: wt.branch!, createdBranch: !!wt.newBranch, base } };
 }
 
 // Resolve the effective cwd + worktree for the request (no-op when no branch given).

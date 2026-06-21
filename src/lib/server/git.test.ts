@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createWorktree, worktreeAddArgs } from './git';
+import { createWorktree, worktreeAddArgs, worktreeDiff, parseNumstat, capPatch } from './git';
 
 // Lock the argv ordering: every positional arg must sit after `--`, so the test
 // fails if the separator is dropped or reordered (the S4 regression guard).
@@ -100,5 +100,106 @@ describe('createWorktree against a real repo', () => {
 		const first = await createWorktree(repo, 'feature-x', { newBranch: true });
 		const second = await createWorktree(repo, 'feature-x', { newBranch: true });
 		expect(second).toBe(first);
+	});
+});
+
+describe('parseNumstat', () => {
+	it('sums additions and deletions and counts files', () => {
+		expect(parseNumstat('3\t1\tone.txt\n0\t2\ttwo.txt\n')).toEqual({
+			fileCount: 2,
+			additions: 3,
+			deletions: 3
+		});
+	});
+
+	it('treats binary rows (-) as zero', () => {
+		expect(parseNumstat('-\t-\timg.png\n5\t0\tcode.ts\n')).toEqual({
+			fileCount: 2,
+			additions: 5,
+			deletions: 0
+		});
+	});
+
+	it('is empty for an empty diff', () => {
+		expect(parseNumstat('')).toEqual({ fileCount: 0, additions: 0, deletions: 0 });
+	});
+});
+
+describe('capPatch', () => {
+	it('keeps a patch under the cap untouched', () => {
+		const patch = 'diff --git a/f b/f\n+hi\n';
+		expect(capPatch(patch)).toEqual({ patch, truncated: false });
+	});
+
+	it('drops whole files once the cap is exceeded', () => {
+		const big = 'x'.repeat(3 * 1024 * 1024);
+		const fileA = `diff --git a/a b/a\n${big}\n`;
+		const fileB = `diff --git a/b b/b\n${big}\n`;
+		const result = capPatch(fileA + fileB);
+		expect(result.truncated).toBe(true);
+		expect(result.patch).toBe(fileA);
+		expect(result.patch).not.toContain('b/b');
+	});
+});
+
+// Build a base commit, branch off it, then layer committed + staged + unstaged +
+// untracked changes so the diff has one of each kind to surface.
+describe('worktreeDiff against a real repo', () => {
+	const env = {
+		...process.env,
+		GIT_AUTHOR_NAME: 't',
+		GIT_AUTHOR_EMAIL: 't@t',
+		GIT_COMMITTER_NAME: 't',
+		GIT_COMMITTER_EMAIL: 't@t'
+	};
+	const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'deck-diff-repo-')));
+	const run = (...args: string[]) => execFileSync('git', ['-C', repo, ...args], { env });
+	const write = (name: string, body: string) => fs.writeFileSync(path.join(repo, name), body);
+
+	execFileSync('git', ['init', '-q', '-b', 'main', repo], { env });
+	write('tracked.txt', 'base\n');
+	run('add', '-A');
+	run('commit', '-qm', 'base');
+	run('checkout', '-qb', 'feature');
+	write('committed.txt', 'committed\n');
+	run('add', '-A');
+	run('commit', '-qm', 'work');
+	write('staged.txt', 'staged\n');
+	run('add', 'staged.txt');
+	write('tracked.txt', 'base\nunstaged\n');
+	write('untracked.txt', 'untracked\n');
+
+	afterAll(() => {
+		fs.rmSync(repo, { recursive: true, force: true });
+	});
+
+	it('captures committed, staged, unstaged and untracked changes since base', async () => {
+		const { patch, meta } = await worktreeDiff(repo, 'main');
+		expect(meta.baseResolved).toBe(true);
+		expect(meta.baseRef).toBe('main');
+		expect(patch).toContain('committed.txt');
+		expect(patch).toContain('staged.txt');
+		expect(patch).toContain('+unstaged');
+		expect(patch).toContain('untracked.txt');
+		expect(meta.fileCount).toBe(4);
+		expect(meta.additions).toBe(4);
+	});
+
+	it('leaves the real index untouched (untracked stays untracked)', async () => {
+		await worktreeDiff(repo, 'main');
+		const status = run('status', '--porcelain').toString();
+		expect(status).toContain('?? untracked.txt');
+	});
+
+	it('resolves the default branch when no base is given', async () => {
+		const { meta } = await worktreeDiff(repo);
+		expect(meta.baseResolved).toBe(true);
+		expect(meta.baseRef).toBe('main');
+	});
+
+	it('falls back to HEAD when the base has no shared history', async () => {
+		const { meta } = await worktreeDiff(repo, 'nope-not-a-ref');
+		expect(meta.baseResolved).toBe(false);
+		expect(meta.baseRef).toBe('HEAD');
 	});
 });
