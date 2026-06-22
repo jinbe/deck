@@ -40,12 +40,14 @@ function sanitizeServerName(name: string): string {
 // after sanitization (e.g. "web api" and "web/api" both become "web-api"), which
 // would otherwise make a lifecycle action target the wrong pane.
 function assertUniqueNames(servers: ServerSpec[]) {
-	const seen = new Set<string>();
+	const names = new Set<string>();
+	const tmuxIds = new Set<string>();
 	for (const s of servers) {
+		if (names.has(s.name)) throw new Error(`duplicate server name: ${s.name}`);
 		const safe = sanitizeServerName(s.name);
-		if (seen.has(s.name)) throw new Error(`duplicate server name: ${s.name}`);
-		if (seen.has(safe)) throw new Error(`server names collide after sanitization: ${s.name}`);
-		seen.add(s.name).add(safe);
+		if (tmuxIds.has(safe)) throw new Error(`server names collide after sanitization: ${s.name}`);
+		names.add(s.name);
+		tmuxIds.add(safe);
 	}
 }
 

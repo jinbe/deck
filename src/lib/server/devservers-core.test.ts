@@ -44,6 +44,14 @@ describe('parseDevConfig', () => {
 		).toThrow(/collide/);
 	});
 
+	it('reports a sanitization collision as a collision, not a duplicate', () => {
+		// "web x" sanitises to "web-x"; the second name is "web-x" verbatim. They are
+		// not raw duplicates, so the error must say collide, not duplicate.
+		expect(() =>
+			parseDevConfig({ servers: [{ name: 'web x', run: 'a' }, { name: 'web-x', run: 'b' }] })
+		).toThrow(/collide/);
+	});
+
 	it('rejects an uncompilable readyPattern', () => {
 		expect(() => parseDevConfig({ servers: [{ name: 'w', run: 'x', readyPattern: '(' }] })).toThrow();
 	});
