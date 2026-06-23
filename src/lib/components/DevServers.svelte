@@ -157,6 +157,13 @@
 					</div>
 				</div>
 
+				{#if s.error}
+					<div class="alert alert-error mt-2 py-1.5 text-xs break-words">{s.error}</div>
+				{/if}
+				{#if s.warning}
+					<div class="alert alert-warning mt-2 py-1.5 text-xs break-words">{s.warning}</div>
+				{/if}
+
 				{#if s.ports.length}
 					<div class="mt-2 flex flex-wrap gap-1.5">
 						{#each s.ports as p (p.port)}

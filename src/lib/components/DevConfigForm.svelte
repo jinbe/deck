@@ -152,6 +152,12 @@
 				<div class="alert alert-error py-1 text-xs">{errorMsg}</div>
 			{/if}
 
+			<p class="text-[11px] opacity-50">
+				Steps and the run command can use
+				<code class="font-mono">$DECK_WORKTREE</code> (session worktree) and
+				<code class="font-mono">$DECK_MAIN</code> (project main checkout).
+			</p>
+
 			<!-- copyFromMain -->
 			<div>
 				<div class="mb-1 text-xs font-medium opacity-70">Copy from main worktree</div>

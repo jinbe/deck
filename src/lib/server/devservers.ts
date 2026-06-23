@@ -16,7 +16,7 @@ import type {
 	SetupStepProgress
 } from '$lib/types';
 import { isAgentKind } from '$lib/types';
-import { listProjects, getStoredSession } from './store';
+import { listProjects, getStoredSession, listStoredSessions } from './store';
 import { confineRelative } from './confine';
 import {
 	createDevPane,
@@ -60,6 +60,7 @@ interface Instance {
 	child?: ChildProcess; // the current setup step's process, so a cancel can kill it
 	previewUrl?: string;
 	error?: string;
+	warning?: string; // non-fatal: a port is held by a process deck didn't start
 }
 
 const SETUP_OUTPUT_CAP = 8000;
@@ -198,10 +199,15 @@ interface Task {
 
 // The child is registered on the instance so a cancel (stop/restart/delete) can
 // kill an in-flight setup step rather than leaking it (e.g. a long pnpm install).
-function runShell(command: string, cwd: string, inst: Instance): Promise<StepResult> {
+function runShell(
+	command: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv,
+	inst: Instance
+): Promise<StepResult> {
 	return new Promise((resolve) => {
 		// detached so the step leads its own process group; cancel kills the group.
-		const child = spawn(command, [], { cwd, shell: true, detached: true });
+		const child = spawn(command, [], { cwd, env, shell: true, detached: true });
 		inst.child = child;
 		let out = '';
 		const cap = (b: Buffer) => {
@@ -220,13 +226,30 @@ function runShell(command: string, cwd: string, inst: Instance): Promise<StepRes
 	});
 }
 
-function shellTask(step: SetupStep, worktree: string, inst: Instance): Task {
+// A resolved cwd that doesn't exist makes spawn fail with the opaque
+// `spawn /bin/sh ENOENT` (node blames the shell, not the missing dir). Check
+// first so a bad step/server cwd reports which directory is actually missing.
+function isDir(p: string): boolean {
+	return fs.statSync(p, { throwIfNoEntry: false })?.isDirectory() ?? false;
+}
+
+// Env exposed to setup steps and the dev command so a script can reference the
+// session worktree (and the project's main checkout) without hardcoding an
+// absolute path — e.g. `cp "$DECK_MAIN/x" "$DECK_WORKTREE/x"`. Merged over the
+// child's inherited env (setup steps) / seeded into the tmux pane (server).
+function devEnv(ctx: ServerCtx): Record<string, string> {
+	return { DECK_WORKTREE: path.resolve(ctx.worktree), DECK_MAIN: path.resolve(ctx.mainPath) };
+}
+
+function shellTask(step: SetupStep, ctx: ServerCtx, inst: Instance): Task {
 	return {
 		label: step.label,
 		exec: () => {
-			const cwd = confineRelative(worktree, step.cwd ?? '.');
+			const cwd = confineRelative(ctx.worktree, step.cwd ?? '.');
 			if (!cwd) return Promise.resolve({ code: 1, output: `cwd escapes worktree: ${step.cwd}` });
-			return runShell(step.run, cwd, inst);
+			if (!isDir(cwd))
+				return Promise.resolve({ code: 1, output: `working directory does not exist: ${cwd}` });
+			return runShell(step.run, cwd, { ...process.env, ...devEnv(ctx) }, inst);
 		}
 	};
 }
@@ -269,8 +292,8 @@ function buildTasks(ctx: ServerCtx, inst: Instance): Task[] {
 	const tasks: Task[] = [];
 	const copy = ctx.dev.copyFromMain ?? [];
 	if (copy.length) tasks.push(copyTask(copy, ctx));
-	for (const s of ctx.dev.setup ?? []) tasks.push(shellTask(s, ctx.worktree, inst));
-	for (const s of ctx.server.setup ?? []) tasks.push(shellTask(s, ctx.worktree, inst));
+	for (const s of ctx.dev.setup ?? []) tasks.push(shellTask(s, ctx, inst));
+	for (const s of ctx.server.setup ?? []) tasks.push(shellTask(s, ctx, inst));
 	return tasks;
 }
 
@@ -311,11 +334,75 @@ async function runSetup(inst: Instance, ctx: ServerCtx, epoch: number): Promise<
 
 // --- launch / health ------------------------------------------------------
 
+function portsOf(server: ServerSpec): number[] {
+	return (server.ports ?? []).map((p) => p.port);
+}
+
+// Every deck-managed server across all agent sessions, with its tmux name and
+// declared ports. Derived from config (not live tmux) so a sanitized pane name
+// never has to be reversed back to a server name. The authoritative set for
+// spotting a port squatter: the same fixed-port server left running in another
+// worktree, or any server that shares a port.
+function allDeckServers(): { sessionId: string; server: ServerSpec; tmuxName: string }[] {
+	const out: { sessionId: string; server: ServerSpec; tmuxName: string }[] = [];
+	for (const session of listStoredSessions()) {
+		if (!isAgentKind(session.kind)) continue;
+		for (const server of devConfigOf(projectForSession(session))?.servers ?? []) {
+			out.push({ sessionId: session.id, server, tmuxName: serverTmuxName(session.id, server.name) });
+		}
+	}
+	return out;
+}
+
+// Kill any *other* live deck server whose ports overlap ours, so a fixed-port
+// server can move between worktrees without a manual stop first. Returns the
+// ports we reclaimed, excluded from the external probe below since the just-
+// killed process may not have released them yet.
+async function killPortConflicts(self: ServerCtx): Promise<Set<number>> {
+	const mine = new Set(portsOf(self.server));
+	const reclaimed = new Set<number>();
+	if (!mine.size) return reclaimed;
+	const live = new Set((await listTmuxSessions()).map((t) => t.name));
+	for (const ref of allDeckServers()) {
+		if (ref.sessionId === self.sessionId && ref.server.name === self.server.name) continue;
+		if (!live.has(ref.tmuxName)) continue;
+		const overlap = portsOf(ref.server).filter((p) => mine.has(p));
+		if (!overlap.length) continue;
+		const other = getInstance(ref.sessionId, ref.server.name);
+		// Same teardown as stopServer: cancel supersedes its bring-up, but its own
+		// finally won't clear flags once the epoch moved, so reset them here (and set
+		// stopRequested) or the killed server would read as perpetually 'starting'.
+		cancel(other);
+		other.stopRequested = true;
+		other.starting = false;
+		other.setupRunning = false;
+		other.launched = false;
+		await killName(ref.tmuxName);
+		overlap.forEach((p) => reclaimed.add(p));
+	}
+	return reclaimed;
+}
+
+// A port still listening once deck's own conflicts are cleared is held by a
+// process deck didn't start — surface it rather than killing an arbitrary
+// process. Skips just-reclaimed ports (their old owner may still be exiting).
+async function externalPortConflict(self: ServerCtx, reclaimed: Set<number>): Promise<string | undefined> {
+	const busy: number[] = [];
+	for (const p of portsOf(self.server)) {
+		if (!reclaimed.has(p) && (await probePort(p))) busy.push(p);
+	}
+	if (!busy.length) return undefined;
+	return `port ${busy.join(', ')} already in use by a process deck didn't start; the server may fail to bind`;
+}
+
 async function launch(inst: Instance, ctx: ServerCtx) {
 	const name = serverTmuxName(ctx.sessionId, ctx.server.name);
 	const cwd = confineRelative(ctx.worktree, ctx.server.cwd ?? '.');
 	if (!cwd) throw new Error(`server cwd escapes worktree: ${ctx.server.cwd}`);
-	await createDevPane(name, cwd, ctx.server.run);
+	if (!isDir(cwd)) throw new Error(`server working directory does not exist: ${cwd}`);
+	const reclaimed = await killPortConflicts(ctx);
+	inst.warning = await externalPortConflict(ctx, reclaimed);
+	await createDevPane(name, cwd, ctx.server.run, devEnv(ctx));
 	inst.launched = true;
 	inst.startedAt = Date.now();
 	inst.runningSeen = false;
@@ -388,7 +475,16 @@ async function computeRuntime(sessionId: string, server: ServerSpec): Promise<Se
 		startedAt: inst.startedAt,
 		now: Date.now()
 	});
-	return { name: server.name, state, tmuxName, ports, previewUrl: inst.previewUrl, setup: inst.setup, error: inst.error };
+	return {
+		name: server.name,
+		state,
+		tmuxName,
+		ports,
+		previewUrl: inst.previewUrl,
+		setup: inst.setup,
+		error: inst.error,
+		warning: inst.warning
+	};
 }
 
 // --- public API (routes) --------------------------------------------------
@@ -435,6 +531,7 @@ export async function startServer(sessionId: string, serverName: string): Promis
 	inst.stopRequested = false;
 	inst.starting = true;
 	inst.error = undefined;
+	inst.warning = undefined;
 	seedSetup(inst, ctx);
 	await killName(serverTmuxName(sessionId, serverName));
 	void bringUp(inst, ctx, epoch);
@@ -447,6 +544,7 @@ export async function stopServer(sessionId: string, serverName: string): Promise
 	inst.stopRequested = true;
 	inst.starting = false;
 	inst.setupRunning = false; // the cancelled setup is no longer running
+	inst.warning = undefined;
 	await killName(serverTmuxName(sessionId, serverName));
 	return computeRuntime(sessionId, ctx.server);
 }
@@ -459,6 +557,7 @@ export async function restartServer(sessionId: string, serverName: string): Prom
 	inst.stopRequested = false;
 	inst.starting = true;
 	inst.error = undefined; // don't leak a prior failure into the relaunch
+	inst.warning = undefined;
 	try {
 		await killName(serverTmuxName(sessionId, serverName));
 		await launch(inst, ctx);

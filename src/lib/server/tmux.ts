@@ -65,8 +65,16 @@ export async function createTmuxSession(name: string, cwd: string, command?: str
 // status (running vs errored vs clean stop) and final output stay readable until
 // deck kills it. Best-effort: a command that exits before the option is set just
 // loses the dead-pane capture, which reads as a clean teardown.
-export async function createDevPane(name: string, cwd: string, command: string) {
-	await tmux('new-session', '-d', '-s', name, '-c', cwd, command);
+export async function createDevPane(
+	name: string,
+	cwd: string,
+	command: string,
+	env: Record<string, string> = {}
+) {
+	// -e KEY=VALUE seeds the new pane's environment (tmux >= 3.0); options must
+	// precede the shell-command. Lets the dev command reference DECK_WORKTREE etc.
+	const envArgs = Object.entries(env).flatMap(([k, v]) => ['-e', `${k}=${v}`]);
+	await tmux('new-session', '-d', '-s', name, '-c', cwd, ...envArgs, command);
 	try {
 		await tmux('set-option', '-w', '-t', `=${name}:`, 'remain-on-exit', 'on');
 	} catch {
