@@ -10,6 +10,7 @@ import { ensureMcp, mcpUrl } from './mcp';
 import { rejectAsk } from './ask';
 import { notify } from './push';
 import { transcriptPath } from './transcript';
+import { lastPrLink } from '../pr';
 
 // Reading the stored transcript (snapshot tail + lazy back-scroll ranges) lives
 // in ./transcript, which serves bounded slices off a per-session line index
@@ -61,9 +62,26 @@ export function appendEvent(id: string, event: Record<string, unknown>) {
 	// consistent with the on-disk snapshot a (re)connecting client reads first:
 	// anything a subscriber has seen is already durable, so a fresh snapshot can't
 	// miss it. A write that fails still emits, so live clients aren't starved.
-	appendLine(transcriptPath(id), JSON.stringify(event) + '\n')
+	const serialized = JSON.stringify(event);
+	appendLine(transcriptPath(id), serialized + '\n')
 		.catch((err) => console.error(`[deck] transcript append failed for ${id}:`, err))
 		.finally(() => emit(`event:${id}`, event));
+	capturePr(id, serialized);
+}
+
+// Capture the most recent GitHub PR link an agent prints. This is the shared
+// write chokepoint for every agent kind (claude's handleEvent and the pi/codex
+// runner both land here), so one hook covers all of them. Scans the whole
+// serialized event (assistant text, tool results, user messages, tool inputs)
+// since the ask is "any PR link, last seen wins". Only writes when the URL
+// differs from the stored one, so the hot append path doesn't rewrite
+// sessions.json per event.
+function capturePr(id: string, serialized: string) {
+	const match = lastPrLink(serialized);
+	if (!match) return;
+	const session = getStoredSession(id);
+	if (!session || session.pr?.url === match.url) return;
+	updateSession(id, { pr: { ...match, seenAt: Date.now() } });
 }
 
 export function setStatus(id: string, status: 'running' | 'idle' | 'error') {

@@ -11,7 +11,7 @@
 	import { shortPath } from '$lib/time';
 	import { ISSUE_BADGE } from '$lib/issues';
 	import { aggregateState } from '$lib/servers';
-	import { ArrowLeft, Bot, Terminal, Menu, X, Plus } from '@lucide/svelte';
+	import { ArrowLeft, Bot, Terminal, Menu, X, Plus, GitPullRequest } from '@lucide/svelte';
 
 	let { data }: PageProps = $props();
 	const session = $derived(data.session);
@@ -31,6 +31,27 @@
 	const liveStatus = $derived(
 		sessions.find((s) => s.id === session.id)?.status ?? session.status
 	);
+
+	// Captured PR link for the header chip. Trust the polled session once it's
+	// loaded (it reflects server truth, including a dismiss that cleared `pr`);
+	// fall back to the page-load session only until the first poll lands. Mirrors
+	// liveStatus, but `pr` can legitimately be undefined, so don't `??`-coalesce
+	// back to the stale page-load value.
+	const livePr = $derived.by(() => {
+		const live = sessions.find((s) => s.id === session.id);
+		return live ? live.pr : session.pr;
+	});
+
+	async function clearPr() {
+		// Best-effort: on failure the next poll keeps the prior PR, so just reconcile
+		// from the store rather than waiting for the 5s tick (cf. loadDiffMeta).
+		try {
+			await fetch(`/api/sessions/${encodeURIComponent(session.id)}/pr`, { method: 'DELETE' });
+		} catch {
+			// transient failure: the chip stays until the dismiss retries or succeeds
+		}
+		await refresh();
+	}
 
 	// Dev-server states per session, from the monitor's cached poll (cheap), for
 	// the header chip and the sidebar dots (issue #32). The Servers tab fetches
@@ -212,6 +233,26 @@
 							{ISSUE_BADGE[session.issue.source].label} {session.issue.id}
 						</span>
 					{/if}
+				{/if}
+				{#if livePr}
+					<span class="badge badge-outline badge-sm shrink-0 gap-1" title="{livePr.repo}#{livePr.number}">
+						<a
+							href={livePr.url}
+							target="_blank"
+							rel="noopener noreferrer"
+							class="link link-hover inline-flex items-center gap-1"
+						>
+							<GitPullRequest size={12} />
+							{livePr.repo}#{livePr.number}
+						</a>
+						<button
+							class="opacity-60 hover:opacity-100"
+							onclick={clearPr}
+							aria-label="Dismiss PR link"
+						>
+							<X size={12} />
+						</button>
+					</span>
 				{/if}
 				<span class="hidden truncate text-xs opacity-60 sm:inline">{shortPath(session.cwd)}</span>
 			</div>

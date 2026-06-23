@@ -1,13 +1,16 @@
 import { customAlphabet } from 'nanoid';
-import type { DeckSession, SessionIssue, SessionKind, SessionStatus } from '$lib/types';
+import type { DeckSession, SessionIssue, SessionKind, SessionPR, SessionStatus } from '$lib/types';
 import { isAgentKind } from '$lib/types';
+import { lastPrLink } from '$lib/pr';
 import {
 	listStoredSessions,
 	getStoredSession,
 	saveSession,
+	updateSession,
 	removeSession,
 	setSessionsMutatedHook
 } from './store';
+import { readTranscriptTailText } from './transcript';
 import {
 	listTmuxSessions,
 	createTmuxSession,
@@ -113,6 +116,26 @@ async function computeSessions(): Promise<DeckSession[]> {
 	return result.sort((a, b) => b.lastActiveAt - a.lastActiveAt);
 }
 
+// One-time best-effort PR backfill for sessions whose links predate capture (or
+// that opened a PR before the chip existed): scan the bounded transcript tail for
+// the most recent GitHub PR URL and persist it so the header chip lights up on
+// open without waiting for a new event. Marked done regardless of outcome, so it
+// runs at most once and a later dismissed `pr` is not resurrected on reload.
+function backfillPr(id: string, alreadyBackfilled?: boolean): SessionPR | undefined {
+	if (alreadyBackfilled) return undefined;
+	const match = lastPrLink(readTranscriptTailText(id));
+	const pr = match ? { ...match, seenAt: Date.now() } : undefined;
+	updateSession(id, pr ? { pr, prBackfilled: true } : { prBackfilled: true });
+	return pr;
+}
+
+// Derived live view of a stored agent session: the live run status plus a
+// one-time PR backfill so the header chip lights up on open.
+function agentSessionView(id: string, stored: DeckSession): DeckSession {
+	const pr = stored.pr ?? backfillPr(id, stored.prBackfilled);
+	return { ...stored, status: agentStatus(stored), pr };
+}
+
 export async function getSession(id: string): Promise<DeckSession | undefined> {
 	if (DEMO) return demoSession(id);
 	if (id.startsWith('t_')) {
@@ -120,11 +143,7 @@ export async function getSession(id: string): Promise<DeckSession | undefined> {
 	}
 	const stored = getStoredSession(id);
 	if (!stored) return undefined;
-	if (isAgentKind(stored.kind)) {
-		const running = agentTurnRunning(id);
-		const status = running ? 'running' : stored.status === 'running' ? 'idle' : stored.status;
-		return { ...stored, status };
-	}
+	if (isAgentKind(stored.kind)) return agentSessionView(id, stored);
 	const alive = stored.tmuxName ? await hasTmuxSession(stored.tmuxName) : false;
 	return { ...stored, status: alive ? 'idle' : 'dead' };
 }
