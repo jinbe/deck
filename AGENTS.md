@@ -48,4 +48,6 @@ pre-commit hook runs `fallow audit` and blocks only newly introduced findings.
   sibling `*.ts` (e.g. `devservers.ts`). Tests sit next to code as `*.test.ts`.
 - Confine all fs/git operations to registered projects and their worktrees (see
   `src/lib/server/confine.ts`). Never read or write outside them.
+- Design language, palette, and themes live in `.impeccable.md` (loaded by the
+  impeccable skill); the implemented theme tokens are in `src/routes/layout.css`.
 - One logical change per PR; branch off `main`.
