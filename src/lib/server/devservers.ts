@@ -451,6 +451,9 @@ function adoptIfRediscovered(inst: Instance, pane: PaneStatus | null) {
 function updateReadiness(inst: Instance, server: ServerSpec, ready: boolean, capturedUrl?: string) {
 	if (!ready) return;
 	inst.runningSeen = true;
+	// The ports are bound now, so a launch-time "port in use" warning is stale:
+	// clear it rather than leave it lingering on a server that reads as running.
+	inst.warning = undefined;
 	inst.previewUrl ??= derivePreviewUrl(server, capturedUrl);
 }
 
