@@ -184,6 +184,16 @@ function readTranscriptTail(id: string): { total: number; start: number; events:
 	return { total, start, events };
 }
 
+// The serialized tail of the transcript (newest SNAPSHOT_MAX events / bytes), as
+// one string, for a bounded one-time scan such as the PR-link backfill on
+// session open. Re-stringifying the parsed tail keeps any embedded URL intact;
+// the bound caps the work regardless of how long the session ran.
+export function readTranscriptTailText(id: string): string {
+	return readTranscriptTail(id)
+		.events.map((e) => JSON.stringify(e))
+		.join('\n');
+}
+
 // The recent-history snapshot split into small frames the client reassembles by
 // `seq`. One big SSE frame doesn't reliably flush through the dev server when the
 // stream opens amid the page-load request burst; ~32KB frames deliver like the

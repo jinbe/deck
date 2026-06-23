@@ -31,6 +31,23 @@ export interface DeckSession {
 	worktree?: { repo: string; branch: string; createdBranch: boolean; base?: string };
 	// set when the session was started from an issue picked in the new-session modal
 	issue?: SessionIssue;
+	// the most recent GitHub PR link seen in the transcript (last-wins), captured
+	// server-side in appendEvent and surfaced as a header chip. Like `issue`, this
+	// is metadata, not a live handle: deck doesn't track PR state.
+	pr?: SessionPR;
+	// set once the one-time historical PR scan has run for this session, so it
+	// doesn't repeat on every open and a dismissed `pr` isn't resurrected from the
+	// transcript on reload (see getSession backfill).
+	prBackfilled?: boolean;
+}
+
+// A captured GitHub PR link. `repo` is owner/repo; `number` and `url` come from
+// the github.com/<owner>/<repo>/pull/<n> match (see lib/pr.ts).
+export interface SessionPR {
+	url: string;
+	repo: string;
+	number: number;
+	seenAt: number;
 }
 
 // The issue a session was launched from, persisted so the header can deep-link
