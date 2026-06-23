@@ -500,24 +500,66 @@ export function listServers(sessionId: string): Promise<ServerRuntime[]> {
 	return Promise.all((dev.servers ?? []).map((s) => computeRuntime(sessionId, s)));
 }
 
-// Setup (file copy + steps) then launch the dev pane. Run in the background so a
-// slow setup (pnpm install, ...) doesn't block the request and its per-step
-// progress is pollable live. A failed step short-circuits before launch. Bails
-// without launching if superseded mid-flight (epoch changed by stop/restart/
-// delete), so it can't double-launch or launch into a torn-down worktree.
-async function bringUp(inst: Instance, ctx: ServerCtx, epoch: number) {
+// An in-flight bring-up is superseded when a stop/restart/delete bumped the epoch
+// or requested a stop, so it must not launch.
+function superseded(inst: Instance, epoch: number): boolean {
+	return inst.stopRequested || inst.epoch !== epoch;
+}
+
+// Record a failure only if we still own the bring-up; a superseding action that
+// moved the epoch owns its own error/flag state.
+function failIfCurrent(inst: Instance, epoch: number, e: unknown) {
+	if (inst.epoch !== epoch) return;
+	inst.error = e instanceof Error ? e.message : 'failed to start';
+}
+
+// Run the setup work, then (re)launch unless it failed/was superseded or the
+// caller asked not to relaunch (a re-run of a server that wasn't running).
+async function runThenLaunch(
+	inst: Instance,
+	ctx: ServerCtx,
+	epoch: number,
+	prepare: () => Promise<boolean>,
+	relaunch: boolean
+) {
+	if (!(await prepare())) return;
+	if (!relaunch) return;
+	if (superseded(inst, epoch)) return;
+	await launch(inst, ctx);
+}
+
+// Shared bring-up driver: run `prepare` (setup work) then conditionally launch,
+// with epoch-guarded error capture and the starting-flag teardown. Run in the
+// background so a slow setup (pnpm install, ...) doesn't block the request and its
+// per-step progress is pollable live. Bails without launching if superseded
+// mid-flight, so it can't double-launch or launch into a torn-down worktree.
+async function orchestrate(
+	inst: Instance,
+	ctx: ServerCtx,
+	epoch: number,
+	prepare: () => Promise<boolean>,
+	relaunch: boolean
+) {
 	try {
-		if (!inst.setupComplete) {
-			if (!(await runSetup(inst, ctx, epoch))) return;
-			inst.setupComplete = true;
-		}
-		if (inst.stopRequested || inst.epoch !== epoch) return;
-		await launch(inst, ctx);
+		await runThenLaunch(inst, ctx, epoch, prepare, relaunch);
 	} catch (e) {
-		if (inst.epoch === epoch) inst.error = e instanceof Error ? e.message : 'failed to start';
+		failIfCurrent(inst, epoch, e);
 	} finally {
 		if (inst.epoch === epoch) inst.starting = false;
 	}
+}
+
+// Run setup unless it's already complete for this worktree; mark it complete on
+// success. false => failed or superseded (don't launch).
+async function prepareSetup(inst: Instance, ctx: ServerCtx, epoch: number): Promise<boolean> {
+	if (inst.setupComplete) return true;
+	if (!(await runSetup(inst, ctx, epoch))) return false;
+	inst.setupComplete = true;
+	return true;
+}
+
+function bringUp(inst: Instance, ctx: ServerCtx, epoch: number): Promise<void> {
+	return orchestrate(inst, ctx, epoch, () => prepareSetup(inst, ctx, epoch), true);
 }
 
 function seedSetup(inst: Instance, ctx: ServerCtx) {
@@ -568,6 +610,124 @@ export async function restartServer(sessionId: string, serverName: string): Prom
 		if (inst.epoch === epoch) inst.starting = false;
 	}
 	return computeRuntime(sessionId, ctx.server);
+}
+
+// --- re-run setup (full re-standup or a single step) ----------------------
+
+// Whether a server's dev pane is currently live (started, not exited). A re-run
+// relaunches only a server that was alive, so a stopped one stays stopped.
+async function isPaneAlive(name: string): Promise<boolean> {
+	const pane = await paneStatus(name);
+	return !!pane && !pane.dead;
+}
+
+// Reject a re-run while a bring-up/setup is already in flight for this server; the
+// existing cancel/epoch supersede still covers concurrent stop/restart/delete.
+function rejectIfBusy(inst: Instance) {
+	if (inst.starting || inst.setupRunning)
+		throw new Error('a setup or start is already in progress for this server');
+}
+
+// Stop the server and flip it to a fresh setup epoch, returning the epoch and
+// whether the pane was alive (so only a running server is relaunched after). A
+// server that wasn't running keeps stopRequested set, so it reads as stopped (not
+// dead) once the re-run finishes.
+async function beginRerun(inst: Instance, ctx: ServerCtx): Promise<{ epoch: number; wasAlive: boolean }> {
+	const name = serverTmuxName(ctx.sessionId, ctx.server.name);
+	// Claim the bring-up synchronously, before the first await, so a concurrent
+	// re-run is rejected by rejectIfBusy; supersede anything stale + capture the epoch.
+	cancel(inst);
+	inst.starting = true;
+	inst.error = undefined;
+	inst.warning = undefined;
+	try {
+		const wasAlive = await isPaneAlive(name);
+		inst.stopRequested = !wasAlive; // a server that wasn't running stays stopped, not dead
+		await killName(name);
+		return { epoch: inst.epoch, wasAlive };
+	} catch (e) {
+		inst.starting = false; // a probe/kill failure must not strand the server as 'starting'
+		throw e;
+	}
+}
+
+// Force the full standup, ignoring a prior setupComplete; re-mark complete on
+// success. false => failed or superseded (don't relaunch).
+async function prepareResetup(inst: Instance, ctx: ServerCtx, epoch: number): Promise<boolean> {
+	inst.setupComplete = false;
+	const ok = await runSetup(inst, ctx, epoch);
+	if (ok) inst.setupComplete = true;
+	return ok;
+}
+
+// Keep the progress list aligned with the current task list so a single-step index
+// maps to the right row; only reshape it when the config changed under us.
+function ensureSetupShape(inst: Instance, tasks: Task[]) {
+	if (inst.setup.length === tasks.length) return;
+	inst.setup = tasks.map((t) => ({ label: t.label, state: 'pending' as const }));
+}
+
+// Run one task, recording its progress; leaves setupComplete untouched (a one-off,
+// not a completion). false => superseded or the step failed (don't relaunch).
+async function prepareStep(inst: Instance, tasks: Task[], index: number, epoch: number): Promise<boolean> {
+	if (inst.epoch !== epoch) return false;
+	ensureSetupShape(inst, tasks);
+	inst.setupRunning = true;
+	inst.error = undefined;
+	try {
+		return await runOneStep(inst, tasks, index);
+	} finally {
+		inst.setupRunning = false;
+	}
+}
+
+// Resolve the task a single-step re-run names, rejecting a stale index or a label
+// that no longer matches the live task list (the config changed since the page was
+// rendered), so a stale per-step click is a clean error rather than the wrong step.
+function resolveStepTask(tasks: Task[], index: number, label?: string): Task {
+	const task = tasks[index];
+	if (!task) throw new Error(`no setup step at index ${index}`);
+	if (label !== undefined && task.label !== label)
+		throw new Error('setup steps changed since the page loaded; reopen the Servers tab');
+	return task;
+}
+
+// Shared re-run tail: stop, run `prepare` in the background, relaunch if the server
+// was alive. Supersede-safe via the epoch captured in beginRerun.
+async function rerun(
+	ctx: ServerCtx,
+	inst: Instance,
+	prepare: (epoch: number) => Promise<boolean>
+): Promise<ServerRuntime> {
+	const { epoch, wasAlive } = await beginRerun(inst, ctx);
+	void orchestrate(inst, ctx, epoch, () => prepare(epoch), wasAlive);
+	return computeRuntime(ctx.sessionId, ctx.server);
+}
+
+// Force a complete re-standup (copy + all steps) ignoring setupComplete, then
+// relaunch the server if it was running. Rejected if a bring-up is already in
+// flight for the server.
+export async function resetupServer(sessionId: string, serverName: string): Promise<ServerRuntime> {
+	const { ctx, inst } = resolveInstance(sessionId, serverName);
+	rejectIfBusy(inst);
+	return rerun(ctx, inst, (epoch) => prepareResetup(inst, ctx, epoch));
+}
+
+// Run a single setup step by index into the freshly-built task list (the copy task
+// first when present, then shared setup, then the server's own), then relaunch the
+// server if it was running. `label` (when given) must still match the task at that
+// index. Rejected if a bring-up is in flight or the index is out of range.
+export async function runSetupStep(
+	sessionId: string,
+	serverName: string,
+	index: number,
+	label?: string
+): Promise<ServerRuntime> {
+	const { ctx, inst } = resolveInstance(sessionId, serverName);
+	rejectIfBusy(inst);
+	const tasks = buildTasks(ctx, inst);
+	resolveStepTask(tasks, index, label); // validate index + label before we stop the server
+	return rerun(ctx, inst, (epoch) => prepareStep(inst, tasks, index, epoch));
 }
 
 // Kill a session's server panes by tmux-name prefix, so panes whose config was
