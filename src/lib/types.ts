@@ -132,6 +132,8 @@ export interface ServerRuntime {
 	previewUrl?: string;
 	setup: SetupStepProgress[];
 	error?: string;
+	// Non-fatal: a port is held by a process deck didn't start (it may fail to bind).
+	warning?: string;
 }
 
 export type IssueSourceType = 'github' | 'linear' | 'clickup';
