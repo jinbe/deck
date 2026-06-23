@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { lastPrLink } from './pr';
+import { lastPrLink, mapPrState } from './pr';
 
 describe('lastPrLink', () => {
 	it('detects a github PR url and parses owner/repo/number', () => {
@@ -69,5 +69,24 @@ describe('lastPrLink', () => {
 		const text = 'https://github.com/acme/web/pull/5';
 		expect(lastPrLink(text)?.number).toBe(5);
 		expect(lastPrLink(text)?.number).toBe(5);
+	});
+});
+
+describe('mapPrState', () => {
+	it('maps terminal states regardless of the draft flag', () => {
+		expect(mapPrState('MERGED', false)).toBe('merged');
+		expect(mapPrState('MERGED', true)).toBe('merged');
+		expect(mapPrState('CLOSED', false)).toBe('closed');
+		expect(mapPrState('CLOSED', true)).toBe('closed');
+	});
+
+	it('distinguishes open from draft via isDraft', () => {
+		expect(mapPrState('OPEN', false)).toBe('open');
+		expect(mapPrState('OPEN', true)).toBe('draft');
+	});
+
+	it('returns null for an unexpected state', () => {
+		expect(mapPrState('', false)).toBeNull();
+		expect(mapPrState('UNKNOWN', false)).toBeNull();
 	});
 });
