@@ -12,7 +12,7 @@
 }
 
 /* daisyUI is scaffolding here; the three themes below are fully custom so the
-   Moravec palette (orange primary, teal secondary, teal-tinted neutrals) and a
+   brand palette (orange primary, teal secondary, teal-tinted neutrals) and a
    flat, border-led, small-radius shape language own the look. No built-ins. */
 @plugin 'daisyui' {
 	themes: false;
@@ -30,9 +30,9 @@
 	--color-base-300: oklch(28% 0.017 220); /* hairlines, hover fills */
 	--color-base-content: oklch(92% 0.012 220); /* primary text */
 
-	--color-primary: oklch(67% 0.2 40); /* Moravec orange, the one accent */
+	--color-primary: oklch(67% 0.2 40); /* brand orange, the one accent */
 	--color-primary-content: oklch(20% 0.04 45); /* near-black on orange for AA */
-	--color-secondary: oklch(47% 0.075 212); /* Moravec teal, lifted for dark */
+	--color-secondary: oklch(47% 0.075 212); /* brand teal, lifted for dark */
 	--color-secondary-content: oklch(97% 0.01 210);
 	--color-accent: oklch(72% 0.1 205); /* bright teal for links/hover */
 	--color-accent-content: oklch(20% 0.03 215);
@@ -72,7 +72,7 @@
 
 	--color-primary: oklch(62% 0.21 40); /* slightly deeper orange on white */
 	--color-primary-content: oklch(22% 0.04 45);
-	--color-secondary: oklch(43% 0.055 215); /* true Moravec teal */
+	--color-secondary: oklch(43% 0.055 215); /* true brand teal */
 	--color-secondary-content: oklch(99% 0.005 215);
 	--color-accent: oklch(46% 0.06 210);
 	--color-accent-content: oklch(99% 0.005 210);
@@ -138,7 +138,7 @@
 
 /* ── global base ──────────────────────────────────────────────────────────
    System sans on purpose (zero font payload). Identity lives in scale,
-   spacing, and the Moravec palette, not in a typeface. The bundled Nerd Font
+   spacing, and the brand palette, not in a typeface. The bundled Nerd Font
    is reserved for shell rendering only (see .terminal-* below). */
 :root {
 	--font-sans:
@@ -159,7 +159,7 @@ body {
 	text-rendering: optimizeLegibility;
 }
 
-/* Tighten brand/heading text a touch more, matching the Moravec website. */
+/* Tighten brand/heading text a touch more. */
 h1,
 h2,
 h3,
