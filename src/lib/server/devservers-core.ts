@@ -66,6 +66,13 @@ export function parseDevConfig(raw: unknown): DevConfig {
 	return cfg;
 }
 
+// Parse a setup-step index from request input: a non-negative integer, else null
+// (rejected upstream as a 400). The upper bound is validated against the live task
+// list in devservers.ts, where the count is known.
+export function parseStepIndex(v: unknown): number | null {
+	return typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null;
+}
+
 // Prefix for every dev-server tmux session, so they can be told apart from
 // deck's shell/agent sessions and adhoc terminals (excluded from the main list).
 export const SERVER_TMUX_PREFIX = 'deck-srv-';

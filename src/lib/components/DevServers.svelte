@@ -2,7 +2,19 @@
 	import type { DeckSession, ServerRuntime, ServerState, SetupStepProgress } from '$lib/types';
 	import ShellView from './ShellView.svelte';
 	import ServerChip from './ServerChip.svelte';
-	import { Play, Square, RotateCw, ExternalLink, ChevronDown, ChevronRight, Check, X, Loader } from '@lucide/svelte';
+	import {
+		Play,
+		Square,
+		RotateCw,
+		ListRestart,
+		RefreshCw,
+		ExternalLink,
+		ChevronDown,
+		ChevronRight,
+		Check,
+		X,
+		Loader
+	} from '@lucide/svelte';
 
 	let {
 		session,
@@ -50,7 +62,7 @@
 		return () => clearInterval(interval);
 	});
 
-	async function act(name: string, action: 'start' | 'stop' | 'restart') {
+	async function post(name: string, body: Record<string, unknown>) {
 		busy = { ...busy, [name]: true };
 		try {
 			const res = await fetch(
@@ -58,11 +70,11 @@
 				{
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({ action })
+					body: JSON.stringify(body)
 				}
 			);
 			if (!res.ok) {
-				errMsg = (await res.json().catch(() => ({})))?.message ?? `${action} failed`;
+				errMsg = (await res.json().catch(() => ({})))?.message ?? 'action failed';
 			} else {
 				errMsg = null;
 			}
@@ -70,6 +82,14 @@
 			busy = { ...busy, [name]: false };
 			await load();
 		}
+	}
+
+	function act(name: string, action: 'start' | 'stop' | 'restart' | 'resetup') {
+		return post(name, { action });
+	}
+
+	function runStep(name: string, step: number, label: string) {
+		return post(name, { action: 'step', step, label });
 	}
 
 	function toggleLogs(name: string) {
@@ -84,6 +104,11 @@
 	}
 	function canStop(s: ServerRuntime) {
 		return !STOPPED.includes(s.state);
+	}
+	// A re-run (full or single step) is refused server-side while a bring-up is in
+	// flight; mirror that in the UI by disabling its controls during setup/starting.
+	function inFlight(s: ServerRuntime) {
+		return s.state === 'setup' || s.state === 'starting';
 	}
 	function logsPath(name: string) {
 		return `/api/sessions/${encodeURIComponent(session.id)}/servers/${encodeURIComponent(name)}/logs`;
@@ -154,6 +179,15 @@
 						>
 							<Square size={14} />
 						</button>
+						<button
+							class="btn join-item btn-sm"
+							onclick={() => act(s.name, 'resetup')}
+							disabled={busy[s.name] || inFlight(s)}
+							title="Re-run setup (full re-standup)"
+							aria-label="Re-run setup"
+						>
+							<ListRestart size={14} />
+						</button>
 					</div>
 				</div>
 
@@ -196,6 +230,15 @@
 										<pre class="terminal-font mt-1 max-h-32 overflow-auto rounded bg-base-200 p-2 text-[11px] whitespace-pre-wrap">{step.output}</pre>
 									{/if}
 								</div>
+								<button
+									class="btn btn-ghost btn-xs shrink-0"
+									onclick={() => runStep(s.name, i, step.label)}
+									disabled={busy[s.name] || inFlight(s)}
+									title="Run this step"
+									aria-label={`Run setup step: ${step.label}`}
+								>
+									<RefreshCw size={12} />
+								</button>
 							</div>
 						{/each}
 					</div>

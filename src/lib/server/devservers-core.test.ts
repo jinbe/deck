@@ -6,6 +6,7 @@ import {
 	GRACE_MS,
 	matchReady,
 	parseDevConfig,
+	parseStepIndex,
 	serverTmuxName,
 	type PaneStatus,
 	type StateInputs
@@ -54,6 +55,32 @@ describe('parseDevConfig', () => {
 
 	it('rejects an uncompilable readyPattern', () => {
 		expect(() => parseDevConfig({ servers: [{ name: 'w', run: 'x', readyPattern: '(' }] })).toThrow();
+	});
+});
+
+describe('parseStepIndex', () => {
+	it('accepts zero', () => {
+		expect(parseStepIndex(0)).toBe(0);
+	});
+	it('accepts a positive integer', () => {
+		expect(parseStepIndex(3)).toBe(3);
+	});
+	it('rejects a negative index', () => {
+		expect(parseStepIndex(-1)).toBeNull();
+	});
+	it('rejects a non-integer', () => {
+		expect(parseStepIndex(1.5)).toBeNull();
+	});
+	it('rejects a numeric string', () => {
+		expect(parseStepIndex('1')).toBeNull();
+	});
+	it('rejects NaN / Infinity', () => {
+		expect(parseStepIndex(NaN)).toBeNull();
+		expect(parseStepIndex(Infinity)).toBeNull();
+	});
+	it('rejects missing input', () => {
+		expect(parseStepIndex(undefined)).toBeNull();
+		expect(parseStepIndex(null)).toBeNull();
 	});
 });
 
