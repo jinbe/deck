@@ -10,8 +10,18 @@
 	import NewSessionModal from '$lib/components/NewSessionModal.svelte';
 	import { shortPath } from '$lib/time';
 	import { ISSUE_BADGE } from '$lib/issues';
+	import { PR_STATE_COLOR } from '$lib/pr';
 	import { aggregateState } from '$lib/servers';
-	import { ArrowLeft, Bot, Terminal, Menu, X, Plus, GitPullRequest } from '@lucide/svelte';
+	import {
+		ArrowLeft,
+		Bot,
+		Terminal,
+		Menu,
+		X,
+		GitPullRequest,
+		Ticket,
+		TriangleAlert
+	} from '@lucide/svelte';
 
 	let { data }: PageProps = $props();
 	const session = $derived(data.session);
@@ -51,6 +61,28 @@
 			// transient failure: the chip stays until the dismiss retries or succeeds
 		}
 		await refresh();
+	}
+
+	// Fetch the captured PR's live GitHub state to colour the chip. Runs once when
+	// a PR is present and again only if the captured URL changes (no polling); the
+	// server persists the state on session.pr, so a subsequent poll/reopen shows
+	// the last-known colour without a refetch. Keyed on the URL so the 5s session
+	// poll doesn't re-trigger it.
+	let prStateFetchedFor = '';
+	$effect(() => {
+		const url = livePr?.url;
+		if (!url || prStateFetchedFor === url) return;
+		prStateFetchedFor = url;
+		void fetchPrState();
+	});
+
+	async function fetchPrState() {
+		try {
+			const res = await fetch(`/api/sessions/${encodeURIComponent(session.id)}/pr`);
+			if (res.ok) await refresh();
+		} catch {
+			// best-effort: leave the chip at its last-known colour
+		}
 	}
 
 	// Dev-server states per session, from the monitor's cached poll (cheap), for
@@ -120,10 +152,6 @@
 		if (tab === 'servers' && !hasServers) tab = 'main';
 	});
 
-	function openNew() {
-		preset = null;
-		modalOpen = true;
-	}
 	function quickAdd(path: string) {
 		preset = { projectPath: path };
 		modalOpen = true;
@@ -226,27 +254,42 @@
 							class="badge badge-outline badge-sm link link-hover shrink-0 gap-1"
 							title="{ISSUE_BADGE[session.issue.source].label} {session.issue.id}"
 						>
-							{ISSUE_BADGE[session.issue.source].label} {session.issue.id}
+							<Ticket size={12} />
+							<span class="hidden sm:inline"
+								>{ISSUE_BADGE[session.issue.source].label} {session.issue.id}</span
+							>
 						</a>
 					{:else}
-						<span class="badge badge-outline badge-sm shrink-0 gap-1">
-							{ISSUE_BADGE[session.issue.source].label} {session.issue.id}
+						<span
+							class="badge badge-outline badge-sm shrink-0 gap-1"
+							title="{ISSUE_BADGE[session.issue.source].label} {session.issue.id}"
+						>
+							<Ticket size={12} />
+							<span class="hidden sm:inline"
+								>{ISSUE_BADGE[session.issue.source].label} {session.issue.id}</span
+							>
 						</span>
 					{/if}
 				{/if}
 				{#if livePr}
-					<span class="badge badge-outline badge-sm shrink-0 gap-1" title="{livePr.repo}#{livePr.number}">
+					{@const prColor = livePr.state ? PR_STATE_COLOR[livePr.state] : undefined}
+					<span
+						class="badge badge-outline badge-sm shrink-0 gap-1"
+						style={prColor ? `color:${prColor};border-color:${prColor}` : undefined}
+						title="{livePr.repo}#{livePr.number}{livePr.state ? ` (${livePr.state})` : ''}"
+					>
 						<a
 							href={livePr.url}
 							target="_blank"
 							rel="noopener noreferrer"
 							class="link link-hover inline-flex items-center gap-1"
+							aria-label="{livePr.repo}#{livePr.number}"
 						>
 							<GitPullRequest size={12} />
-							{livePr.repo}#{livePr.number}
+							<span class="hidden sm:inline">{livePr.repo}#{livePr.number}</span>
 						</a>
 						<button
-							class="opacity-60 hover:opacity-100"
+							class="hidden opacity-60 hover:opacity-100 sm:inline-flex"
 							onclick={clearPr}
 							aria-label="Dismiss PR link"
 						>
@@ -260,11 +303,11 @@
 				<ServerChip state={serverChip} count={myServers.length} />
 			{/if}
 			{#if session.kind === 'claude' && session.permissionMode === 'bypassPermissions'}
-				<span class="badge badge-outline badge-sm shrink-0">yolo</span>
+				<span class="badge badge-outline badge-sm shrink-0 gap-1" title="yolo (bypassPermissions)">
+					<TriangleAlert size={12} class="sm:hidden" />
+					<span class="hidden sm:inline">yolo</span>
+				</span>
 			{/if}
-			<button class="btn btn-primary btn-sm shrink-0" onclick={openNew} aria-label="New session">
-				<Plus size={16} /> <span class="hidden sm:inline">New</span>
-			</button>
 		</div>
 
 		{#if gitRepo || hasServers}

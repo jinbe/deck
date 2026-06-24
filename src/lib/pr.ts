@@ -1,6 +1,7 @@
 // Pure GitHub PR-link detection, shared by the server-side capture hook
 // (appendEvent) and the one-time backfill scan. Node-free and unit-tested per
 // the repo convention so the regex logic stays verifiable in isolation.
+import type { PrState } from './types';
 
 export interface PrMatch {
 	url: string;
@@ -29,3 +30,24 @@ export function lastPrLink(text: string): PrMatch | null {
 	}
 	return last;
 }
+
+// gh reports terminal states (MERGED/CLOSED) and OPEN; draft is a separate flag
+// that only qualifies an open PR. Anything else (an unexpected state string)
+// maps to null so the caller leaves the chip neutral rather than guessing.
+const PR_STATES: Record<string, PrState> = { MERGED: 'merged', CLOSED: 'closed', OPEN: 'open' };
+
+// Map `gh pr view --json state,isDraft` onto the chip's state.
+export function mapPrState(state: string, isDraft: boolean): PrState | null {
+	const base = PR_STATES[state] ?? null;
+	if (base === 'open' && isDraft) return 'draft';
+	return base;
+}
+
+// Standard GitHub state colours, applied literally (not theme tokens) so the
+// chip reads the same open/merged/closed/draft as GitHub itself.
+export const PR_STATE_COLOR: Record<PrState, string> = {
+	open: '#1f883d',
+	merged: '#8250df',
+	closed: '#cf222e',
+	draft: '#6e7781'
+};

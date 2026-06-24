@@ -41,13 +41,22 @@ export interface DeckSession {
 	prBackfilled?: boolean;
 }
 
+// Live GitHub state of a captured PR, mapped from `gh pr view`'s state + isDraft
+// (see lib/pr.ts). Coloured with the standard GitHub palette in the header chip.
+export type PrState = 'open' | 'merged' | 'closed' | 'draft';
+
 // A captured GitHub PR link. `repo` is owner/repo; `number` and `url` come from
-// the github.com/<owner>/<repo>/pull/<n> match (see lib/pr.ts).
+// the github.com/<owner>/<repo>/pull/<n> match (see lib/pr.ts). `state` is the
+// last fetched GitHub state (absent until the first fetch lands or if it fails),
+// `checkedAt` when that fetch ran; both persist so reopening shows the last-known
+// colour instantly.
 export interface SessionPR {
 	url: string;
 	repo: string;
 	number: number;
 	seenAt: number;
+	state?: PrState;
+	checkedAt?: number;
 }
 
 // The issue a session was launched from, persisted so the header can deep-link
