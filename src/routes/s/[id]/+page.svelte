@@ -283,6 +283,7 @@
 							target="_blank"
 							rel="noopener noreferrer"
 							class="link link-hover inline-flex items-center gap-1"
+							aria-label="{livePr.repo}#{livePr.number}"
 						>
 							<GitPullRequest size={12} />
 							<span class="hidden sm:inline">{livePr.repo}#{livePr.number}</span>

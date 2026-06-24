@@ -24,7 +24,7 @@ async function fetchPrState(pr: SessionPR): Promise<PrState | null> {
 	const { stdout } = await exec(
 		'gh',
 		['pr', 'view', String(pr.number), '-R', pr.repo, '--json', 'state,isDraft'],
-		{ timeout: GH_TIMEOUT_MS }
+		{ maxBuffer: 16 * 1024 * 1024, timeout: GH_TIMEOUT_MS }
 	);
 	const view = JSON.parse(stdout) as GhPrView;
 	return mapPrState(view.state, view.isDraft);
