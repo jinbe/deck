@@ -342,14 +342,23 @@
 	}
 
 	// Fire a quick message immediately; `expand: true` opts it into server-side
-	// [token] expansion (the popover sends canned text, not the typed input).
+	// [token] expansion (the popover sends canned text, not the typed input). If
+	// the send fails (e.g. a message that expands to empty against a session with
+	// no PR hits the empty-prompt 400), drop the text into an empty composer so the
+	// click isn't silently lost; never clobber what the user is already typing.
 	async function sendQuickMessage(text: string) {
 		atBottom = true;
-		await fetch(`/api/sessions/${encodeURIComponent(session.id)}/send`, {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ text, expand: true })
-		});
+		try {
+			const res = await fetch(`/api/sessions/${encodeURIComponent(session.id)}/send`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ text, expand: true })
+			});
+			if (res.ok) return;
+		} catch {
+			// fall through to restore the text below
+		}
+		if (!input.trim()) input = text;
 	}
 
 	async function interrupt() {
