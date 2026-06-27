@@ -80,6 +80,16 @@ export interface SessionIssue {
 	url: string;
 }
 
+// A user-configured canned message shown in the agent composer's quick-message
+// popover (issue #45). `label` is the menu label, falling back to the text when
+// absent. `text` may contain [tokens] expanded server-side at send time (see
+// lib/placeholders.ts). Stored system-wide in ~/.deck/quick-messages.json.
+export interface QuickMessage {
+	id: string;
+	label?: string;
+	text: string;
+}
+
 export interface Project {
 	name: string;
 	path: string;
