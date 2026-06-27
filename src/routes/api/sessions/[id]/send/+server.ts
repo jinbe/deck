@@ -6,6 +6,7 @@ import { agentSend, agentInterrupt } from '$lib/server/agents/dispatch';
 import type { ImageInput } from '$lib/server/claude';
 import { sendKeys, sendRawKey } from '$lib/server/tmux';
 import { updateSession } from '$lib/server/store';
+import { expandPlaceholders, contextFromSession } from '$lib/placeholders';
 
 const IMAGE_TYPE = /^image\/(png|jpe?g|gif|webp)$/;
 
@@ -48,7 +49,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
 	if (isAgentKind(session.kind)) {
 		const images = parseImages(body.images);
-		if (!text.trim() && images.length === 0) error(400, 'empty prompt');
+		// Quick messages opt into [token] expansion against the live session; a
+		// normally typed message is sent verbatim so literal brackets are untouched.
+		const prompt = body.expand === true ? expandPlaceholders(text, contextFromSession(session)) : text;
+		if (!prompt.trim() && images.length === 0) error(400, 'empty prompt');
 		const meta =
 			typeof body.answersFor === 'string'
 				? { answersFor: body.answersFor, answers: Array.isArray(body.answers) ? body.answers : undefined }
@@ -61,7 +65,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		anchorRecency(session.id);
 		// no running guard: a message sent mid-turn is queued (claude) or restarts
 		// the turn (per-turn agents)
-		agentSend(session, text, images.length ? images : undefined, meta);
+		agentSend(session, prompt, images.length ? images : undefined, meta);
 		return json({ ok: true, status: 'running' });
 	}
 

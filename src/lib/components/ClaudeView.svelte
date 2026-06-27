@@ -6,6 +6,7 @@
 	import Linked from './Linked.svelte';
 	import ToolCall from './ToolCall.svelte';
 	import AskQuestion from './AskQuestion.svelte';
+	import QuickMessages from './QuickMessages.svelte';
 	import { Send, Square, ChevronDown, ArrowDown, Paperclip, X } from '@lucide/svelte';
 
 	let { session }: { session: DeckSession } = $props();
@@ -340,6 +341,17 @@
 		});
 	}
 
+	// Fire a quick message immediately; `expand: true` opts it into server-side
+	// [token] expansion (the popover sends canned text, not the typed input).
+	async function sendQuickMessage(text: string) {
+		atBottom = true;
+		await fetch(`/api/sessions/${encodeURIComponent(session.id)}/send`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ text, expand: true })
+		});
+	}
+
 	async function interrupt() {
 		await fetch(`/api/sessions/${encodeURIComponent(session.id)}/send`, {
 			method: 'POST',
@@ -531,6 +543,7 @@
 					<Square size={16} /> <span class="hidden sm:inline">Interrupt</span>
 				</button>
 			{/if}
+			<QuickMessages onpick={sendQuickMessage} />
 			<button class="btn btn-primary" onclick={send} disabled={!canSend} aria-label="Send">
 				<Send size={16} /> <span class="hidden sm:inline">Send</span>
 			</button>

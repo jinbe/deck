@@ -8,34 +8,13 @@ import { isFlagSafe } from '$lib/server/agents/args';
 import { agentSend } from '$lib/server/agents/dispatch';
 import { listProjects, updateProject } from '$lib/server/store';
 import { expandTilde } from '$lib/server/fsutil';
+import { expandPlaceholders, contextFromSession } from '$lib/placeholders';
 
 const KINDS: SessionKind[] = ['claude', 'pi', 'codex', 'shell'];
 const ISSUE_SOURCES: IssueSourceType[] = ['github', 'linear', 'clickup'];
 
 type WorktreeReq = { branch?: string; newBranch?: boolean; base?: string };
 type Worktree = { repo: string; branch: string; createdBranch: boolean; base?: string };
-
-// Substitute [title]/[branch-name]/[base-branch]/[cwd]/[issue_id]/[issue_url] in
-// a first prompt. [branch] is kept as a back-compat alias for [branch-name].
-function resolvePrompt(
-	template: string,
-	title: string,
-	wt: WorktreeReq | undefined,
-	cwd: string,
-	issue: SessionIssue | undefined
-): string {
-	const { branch = '', base = '' } = wt ?? {};
-	const { id = '', url = '' } = issue ?? {};
-	return template
-		.replaceAll('[title]', title)
-		.replaceAll('[branch-name]', branch)
-		.replaceAll('[base-branch]', base)
-		.replaceAll('[branch]', branch)
-		.replaceAll('[cwd]', cwd)
-		.replaceAll('[issue_id]', id)
-		.replaceAll('[issue_url]', url)
-		.trim();
-}
 
 const asStr = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
 
@@ -103,25 +82,23 @@ async function makeWorktree(
 async function resolveWorktree(
 	cwd: string,
 	body: { worktree?: WorktreeReq }
-): Promise<{ cwd: string; worktree?: Worktree; wt?: WorktreeReq; branch: string }> {
+): Promise<{ cwd: string; worktree?: Worktree; branch: string }> {
 	const wt = body.worktree?.branch ? body.worktree : undefined;
 	if (!wt) return { cwd, branch: '' };
 	const made = await makeWorktree(cwd, wt);
-	return { cwd: made.cwd, worktree: made.worktree, wt, branch: wt.branch! };
+	return { cwd: made.cwd, worktree: made.worktree, branch: wt.branch! };
 }
 
-// Kick off the agent's first turn if a non-empty prompt was supplied.
+// Kick off the agent's first turn if a non-empty prompt was supplied, expanding
+// its [tokens] against the freshly-created session.
 function maybeDispatch(
 	session: Awaited<ReturnType<typeof createSession>>,
 	kind: SessionKind,
-	prompt: unknown,
-	wt: WorktreeReq | undefined,
-	cwd: string,
-	issue: SessionIssue | undefined
+	prompt: unknown
 ): void {
 	if (!isAgentKind(kind)) return;
 	if (typeof prompt !== 'string' || !prompt.trim()) return;
-	agentSend(session, resolvePrompt(prompt, session.title, wt, cwd, issue));
+	agentSend(session, expandPlaceholders(prompt, contextFromSession(session)));
 }
 
 export const GET: RequestHandler = async () => {
@@ -133,7 +110,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	const { kind, title, model, provider, permissionMode, command, prompt } = body;
 	if (!KINDS.includes(kind)) error(400, 'invalid kind');
 
-	const { cwd, worktree, wt, branch } = await resolveWorktree(resolveCwd(body.cwd), body);
+	const { cwd, worktree, branch } = await resolveWorktree(resolveCwd(body.cwd), body);
 	const issue = parseIssue(body.issue);
 
 	const session = await createSession({
@@ -148,6 +125,6 @@ export const POST: RequestHandler = async ({ request }) => {
 		issue
 	});
 
-	maybeDispatch(session, kind, prompt, wt, cwd, issue);
+	maybeDispatch(session, kind, prompt);
 	return json(session, { status: 201 });
 };
