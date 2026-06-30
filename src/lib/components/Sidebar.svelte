@@ -172,7 +172,7 @@
 					{:else}
 						<ChevronRight size={13} class="shrink-0 opacity-60" />
 					{/if}
-					<span class="size-1.5 shrink-0 rounded-full {bucketDot(bucket.key)}"></span>
+					<span class="size-1.5 shrink-0 rounded-full {bucketDot(bucket.key)}" title={bucket.label}></span>
 					<span
 						class="min-w-0 flex-1 truncate text-xs font-semibold {bucket.key === 'needs-attention'
 							? 'text-error'
