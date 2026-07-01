@@ -194,12 +194,11 @@ async function saveImages(worktree: string, detail: IssueDetail, apiKey?: string
 	const rel = path.join(ASSETS_DIR, safeSeg(detail.ref));
 	const dir = path.join(worktree, rel);
 	fs.mkdirSync(dir, { recursive: true });
-	const saved: string[] = [];
-	for (const url of detail.images.slice(0, MAX_IMAGES_PER_ISSUE)) {
-		const p = await saveOne(url, dir, rel, detail.source, apiKey);
-		if (p) saved.push(p);
-	}
-	return saved;
+	// Download the capped set in parallel (saveOne never rejects), so the first
+	// prompt waits on the slowest single image rather than the sum of timeouts.
+	const urls = detail.images.slice(0, MAX_IMAGES_PER_ISSUE);
+	const saved = await Promise.all(urls.map((url) => saveOne(url, dir, rel, detail.source, apiKey)));
+	return saved.filter((p): p is string => p !== null);
 }
 
 // Add a line to a git exclude file if absent (idempotent), on its own line.
