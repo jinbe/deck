@@ -172,6 +172,8 @@ describe('parseOriginRepo', () => {
 		expect(parseOriginRepo('../acme/web')).toBeNull();
 		expect(parseOriginRepo('/home/me/acme/web')).toBeNull();
 		expect(parseOriginRepo('~/code/acme/web')).toBeNull();
+		expect(parseOriginRepo('file:///Users/me/acme/web')).toBeNull();
+		expect(parseOriginRepo('C:/Users/me/acme/web')).toBeNull();
 	});
 });
 
