@@ -69,7 +69,13 @@
 
 	async function prDismiss() {
 		if (!currentSession) return;
-		await fetch(`/api/sessions/${encodeURIComponent(currentSession.id)}/pr`, { method: 'DELETE' });
+		const res = await fetch(`/api/sessions/${encodeURIComponent(currentSession.id)}/pr`, {
+			method: 'DELETE'
+		});
+		if (!res.ok) {
+			const data = await res.json().catch(() => null);
+			throw new Error(data?.message || 'action failed');
+		}
 		await loadData();
 	}
 
