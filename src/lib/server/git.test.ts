@@ -9,7 +9,8 @@ import {
 	worktreeDiff,
 	parseNumstat,
 	capPatch,
-	fetchPullRef
+	fetchPullRef,
+	parseOriginRepo
 } from './git';
 
 // Lock the argv ordering: every positional arg must sit after `--`, so the test
@@ -145,6 +146,26 @@ describe('fetchPullRef against a real repo', () => {
 
 	it('wraps a fetch failure (no GitHub origin) in a clear error', async () => {
 		await expect(fetchPullRef(repo, 4242)).rejects.toThrow(/failed to fetch PR #4242/);
+	});
+});
+
+describe('parseOriginRepo', () => {
+	it('parses https, ssh, scp-style, and aliased remotes', () => {
+		expect(parseOriginRepo('https://github.com/acme/web.git')).toBe('acme/web');
+		expect(parseOriginRepo('https://github.com/acme/web')).toBe('acme/web');
+		expect(parseOriginRepo('https://github.com/acme/web/')).toBe('acme/web');
+		expect(parseOriginRepo('git@github.com:acme/web.git')).toBe('acme/web');
+		expect(parseOriginRepo('ssh://git@github.com/acme/web.git')).toBe('acme/web');
+		expect(parseOriginRepo('ssh://git@github.com:22/acme/web.git')).toBe('acme/web');
+		expect(parseOriginRepo('https://user:token@github.com/acme/web.git')).toBe('acme/web');
+		expect(parseOriginRepo('git@github-work:acme/web.git')).toBe('acme/web');
+		expect(parseOriginRepo('https://github.com/acme/web.git/')).toBe('acme/web');
+		expect(parseOriginRepo('  https://github.com/acme/web.git\n')).toBe('acme/web');
+	});
+
+	it('returns null when the url has no owner/repo tail', () => {
+		expect(parseOriginRepo('')).toBeNull();
+		expect(parseOriginRepo('not-a-url')).toBeNull();
 	});
 });
 

@@ -4,6 +4,7 @@
 // a project with no GitHub source resolves to an empty list.
 import type { GithubSource, Project, PullRequest } from '$lib/types';
 import { fetchReviewRequestedPrs } from '../issues/github';
+import { originRepo } from '../git';
 import { createTtlCache } from '../ttl-cache';
 
 export interface PrSourceError {
@@ -31,10 +32,24 @@ export function invalidatePrs(projectPath: string): void {
 	cache.invalidate(projectPath);
 }
 
-// Fan out to every GitHub source at once; a failure surfaces as an error entry
-// instead of sinking the whole list.
+// Keep only the GitHub sources whose repo is the one behind the project's
+// `origin`. Review mode checks a picked PR out into a worktree of the project
+// repo, and `pull/<n>` refs live on origin, so PRs from any other source repo
+// can't be fetched — and their numbers can collide with origin's. Scoping the
+// list keeps those uncheckoutable PRs out of the picker. When origin can't be
+// resolved (no git repo, no origin) we don't filter, so a correctly-configured
+// single-source project never blanks.
+export function scopeToOrigin(sources: GithubSource[], origin: string | null): GithubSource[] {
+	if (!origin) return sources;
+	const want = origin.toLowerCase();
+	return sources.filter((s) => `${s.owner}/${s.repo}`.toLowerCase() === want);
+}
+
+// Fan out to every in-scope GitHub source at once; a failure surfaces as an
+// error entry instead of sinking the whole list.
 async function fanOut(project: Project): Promise<PrsResult> {
-	const sources = (project.sources ?? []).filter((s): s is GithubSource => s.type === 'github');
+	const github = (project.sources ?? []).filter((s): s is GithubSource => s.type === 'github');
+	const sources = scopeToOrigin(github, await originRepo(project.path));
 	const settled = await Promise.allSettled(sources.map((s) => fetchReviewRequestedPrs(s)));
 
 	const prs: PullRequest[] = [];
