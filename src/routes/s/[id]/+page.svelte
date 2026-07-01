@@ -280,7 +280,7 @@
 	/>
 {/snippet}
 
-<div class="flex h-full lg:gap-5" class:select-none={resizing} class:cursor-col-resize={resizing}>
+<div class="flex h-full" class:select-none={resizing} class:cursor-col-resize={resizing}>
 	<div
 		class="relative hidden h-full lg:block lg:shrink-0"
 		style="width: {sidebarWidth}px"
@@ -296,7 +296,7 @@
 			aria-valuemax={SIDEBAR_MAX}
 			aria-valuetext="{sidebarWidth} pixels"
 			tabindex="0"
-			class="group absolute inset-y-0 -right-3 w-3 cursor-col-resize touch-none"
+			class="group absolute inset-y-0 -right-1.5 w-3 cursor-col-resize touch-none"
 			title="Drag to resize · double-click to reset"
 			onpointerdown={onHandleDown}
 			onpointermove={onHandleMove}

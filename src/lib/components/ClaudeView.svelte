@@ -412,7 +412,7 @@
 	<div
 		bind:this={scroller}
 		onscroll={onScroll}
-		class="min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3"
+		class="min-h-0 flex-1 space-y-3 overflow-y-auto py-3"
 	>
 		{#if !loaded}
 			<div class="flex h-full items-center justify-center">
