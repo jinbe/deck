@@ -143,6 +143,30 @@ export async function fetchPullRef(repo: string, prNumber: number): Promise<stri
 	return branch;
 }
 
+// owner/repo parsed from a GitHub remote URL, or null if it doesn't look like
+// one. Handles https, scp-style ssh (git@host:owner/repo), ssh:// URLs, host
+// aliases, and an optional .git suffix / trailing slash. Case is preserved;
+// compare case-insensitively (GitHub owners/repos are case-insensitive).
+export function parseOriginRepo(remoteUrl: string): string | null {
+	const m = remoteUrl
+		.trim()
+		.replace(/\/$/, '')
+		.replace(/\.git$/i, '')
+		.match(/[/:]([^/:]+)\/([^/:]+)$/);
+	return m ? `${m[1]}/${m[2]}` : null;
+}
+
+// The owner/repo behind a repo's `origin` remote, or null when there's no origin
+// or it isn't a recognisable GitHub remote. Review mode uses this to scope the PR
+// picker to the repo it can actually check a PR out from.
+export async function originRepo(repo: string): Promise<string | null> {
+	try {
+		return parseOriginRepo(await git(repo, 'remote', 'get-url', 'origin'));
+	} catch {
+		return null;
+	}
+}
+
 // --- worktree diff (the Changes tab) -------------------------------------
 
 const PATCH_CAP = 5 * 1024 * 1024; // ~5 MB of patch before we trim whole files
