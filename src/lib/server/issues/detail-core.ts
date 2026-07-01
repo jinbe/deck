@@ -88,6 +88,8 @@ export function imageUrls(markdown: string): string[] {
 // loopback / link-local / private literals + localhost. deck is single-user and
 // the URLs come from the user's own sources, so this isn't a full allowlist —
 // just closes the cloud-metadata / internal-service vector before a blind fetch.
+// It screens the literal host only; the download also refuses redirects
+// (redirect: 'manual', see detail.ts), so DNS-rebinding is the accepted residual.
 const BLOCKED_HOST =
 	/^(localhost$|.*\.localhost$|127\.|10\.|0\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?$|\[?f[cde])/i;
 export function isSafeImageUrl(raw: string): boolean {
@@ -95,7 +97,8 @@ export function isSafeImageUrl(raw: string): boolean {
 	try {
 		const u = new URL(raw);
 		if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
-		host = u.hostname;
+		// Fold a fully-qualified trailing dot ("localhost.") so it can't slip past.
+		host = u.hostname.replace(/\.$/, '');
 	} catch {
 		return false;
 	}

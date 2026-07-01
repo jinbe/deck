@@ -114,18 +114,33 @@ function safeSeg(ref: string): string {
 	return /^\.+$/.test(s) ? '_' : s;
 }
 
-// uploads.linear.app needs the same auth header as the API; GitHub/ClickUp
-// attachment URLs download plain (private-repo GitHub assets may 403 — dropped).
-function authHeaders(source: SessionIssue['source'], apiKey?: string): Record<string, string> {
-	return source === 'linear' && apiKey ? { authorization: apiKey } : {};
+// The Linear API key may ride only on a request to Linear's own upload host: an
+// image URL comes from an (attacker-influenceable) issue body, so a credential
+// must never be attached to an arbitrary third-party host. GitHub/ClickUp assets
+// download unauthenticated (a private-repo asset just 403s and is dropped).
+const LINEAR_UPLOAD_HOST = 'uploads.linear.app';
+function authHeaders(
+	source: SessionIssue['source'],
+	host: string,
+	apiKey?: string
+): Record<string, string> {
+	return source === 'linear' && apiKey && host === LINEAR_UPLOAD_HOST
+		? { authorization: apiKey }
+		: {};
 }
 
+// `redirect: 'manual'` so a 3xx from an allowed host to an internal target can't
+// be followed (it reads as !ok and drops). isSafeImageUrl has already screened
+// the literal host; DNS-rebinding stays an accepted residual for a single-user
+// local tool.
 async function downloadImage(
 	url: string,
 	dest: string,
-	headers: Record<string, string>
+	source: SessionIssue['source'],
+	apiKey?: string
 ): Promise<boolean> {
-	const res = await fetch(url, { headers, signal: AbortSignal.timeout(IMG_TIMEOUT_MS) });
+	const headers = authHeaders(source, new URL(url).hostname, apiKey);
+	const res = await fetch(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(IMG_TIMEOUT_MS) });
 	if (!res.ok) return false;
 	const buf = Buffer.from(await res.arrayBuffer());
 	if (!buf.length) return false;
@@ -134,16 +149,20 @@ async function downloadImage(
 }
 
 // Download one image into `dir`; return its worktree-relative path, or null if
-// it 403s / times out / comes back empty (best-effort, one bad image is dropped).
+// it 403s / redirects / times out / comes back empty (best-effort, one bad image
+// is dropped).
 async function saveOne(
 	url: string,
 	dir: string,
 	rel: string,
-	headers: Record<string, string>
+	source: SessionIssue['source'],
+	apiKey?: string
 ): Promise<string | null> {
 	const file = imageFile(url);
 	try {
-		return (await downloadImage(url, path.join(dir, file), headers)) ? path.join(rel, file) : null;
+		return (await downloadImage(url, path.join(dir, file), source, apiKey))
+			? path.join(rel, file)
+			: null;
 	} catch {
 		return null;
 	}
@@ -157,10 +176,9 @@ async function saveImages(worktree: string, detail: IssueDetail, apiKey?: string
 	const rel = path.join(ASSETS_DIR, safeSeg(detail.ref));
 	const dir = path.join(worktree, rel);
 	fs.mkdirSync(dir, { recursive: true });
-	const headers = authHeaders(detail.source, apiKey);
 	const saved: string[] = [];
 	for (const url of detail.images) {
-		const p = await saveOne(url, dir, rel, headers);
+		const p = await saveOne(url, dir, rel, detail.source, apiKey);
 		if (p) saved.push(p);
 	}
 	return saved;

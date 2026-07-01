@@ -80,6 +80,10 @@ describe('isSafeImageUrl', () => {
 		expect(isSafeImageUrl('http://172.16.0.1/x.png')).toBe(false);
 		expect(isSafeImageUrl('http://[::1]/x.png')).toBe(false);
 	});
+
+	it('folds a trailing-dot fqdn before matching', () => {
+		expect(isSafeImageUrl('http://localhost./x.png')).toBe(false);
+	});
 });
 
 describe('truncate', () => {
