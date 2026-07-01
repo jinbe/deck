@@ -174,8 +174,8 @@
 	const SIDEBAR_WIDTH_KEY = 'deck:sidebar:width';
 	let sidebarWidth = $state(SIDEBAR_DEFAULT);
 	let resizing = $state(false);
-	let sidebarEl: HTMLElement;
-	let dragLeft = 0; // sidebar's left viewport x, captured at drag start
+	let dragStartX = 0; // pointer x at drag start
+	let dragStartWidth = 0; // sidebar width at drag start
 
 	onMount(() => {
 		try {
@@ -196,14 +196,18 @@
 	function onHandleDown(e: PointerEvent) {
 		if (e.button !== 0) return; // left button only
 		resizing = true;
-		dragLeft = sidebarEl.getBoundingClientRect().left;
+		dragStartX = e.clientX;
+		dragStartWidth = sidebarWidth;
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 		e.preventDefault();
 	}
 
 	function onHandleMove(e: PointerEvent) {
 		if (!resizing) return;
-		sidebarWidth = clampSidebarWidth(e.clientX - dragLeft);
+		// Track the pointer delta from drag start, not absolute x: the handle
+		// overhangs the sidebar's right edge, so an absolute width would jump by
+		// that overhang on the first move.
+		sidebarWidth = clampSidebarWidth(dragStartWidth + (e.clientX - dragStartX));
 	}
 
 	// End a drag exactly once and persist. Reached via pointerup, pointercancel,
@@ -259,7 +263,6 @@
 
 <div class="flex h-full lg:gap-5" class:select-none={resizing} class:cursor-col-resize={resizing}>
 	<div
-		bind:this={sidebarEl}
 		class="relative hidden h-full lg:block lg:shrink-0"
 		style="width: {sidebarWidth}px"
 	>
