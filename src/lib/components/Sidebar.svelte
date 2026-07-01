@@ -84,7 +84,7 @@
 </script>
 
 {#snippet sessionRow(s: DeckSession)}
-	<li class="flex items-center gap-1 px-1">
+	<li class="flex items-center gap-1 pl-1 pr-0">
 		<a
 			href={`/s/${encodeURIComponent(s.id)}`}
 			class="flex min-w-0 flex-1 items-center gap-1.5 rounded-btn px-2 py-1 hover:bg-base-200 {s.id ===
@@ -165,7 +165,7 @@
 			{@const isOpen = !statusCollapse.has(bucket.key)}
 			<div>
 				<button
-					class="flex w-full items-center gap-1 rounded-btn px-1 py-0.5 text-left hover:bg-base-200"
+					class="flex w-full items-center gap-1 rounded-btn pl-1 pr-0 py-0.5 text-left hover:bg-base-200"
 					onclick={() => statusCollapse.toggle(bucket.key)}
 					aria-expanded={isOpen}
 				>
@@ -176,11 +176,12 @@
 					{/if}
 					<span class="size-1.5 shrink-0 rounded-full {bucketDot(bucket.key)}" title={bucket.label}></span>
 					<span
-						class="min-w-0 flex-1 truncate text-xs font-semibold {bucket.key === 'needs-attention'
+						class="min-w-0 truncate text-xs font-semibold {bucket.key === 'needs-attention'
 							? 'text-error'
 							: 'opacity-70'}">{bucket.label}</span
 					>
-					<span class="shrink-0 text-xs opacity-50">{bucket.sessions.length}</span>
+					<span class="badge badge-ghost badge-sm shrink-0">{bucket.sessions.length}</span>
+					<div class="flex-1"></div>
 				</button>
 				{#if isOpen}
 					<ul class="mt-1 space-y-0.5 pl-3">
@@ -200,7 +201,7 @@
 			{@const isOpen = collapse.has(group.name)}
 			<div>
 				<button
-					class="flex w-full items-center gap-1 rounded-btn px-1 py-0.5 text-left hover:bg-base-200"
+					class="flex w-full items-center gap-1 rounded-btn pl-1 pr-0 py-0.5 text-left hover:bg-base-200"
 					onclick={() => collapse.toggle(group.name)}
 					aria-expanded={isOpen}
 				>
@@ -209,14 +210,15 @@
 					{:else}
 						<ChevronRight size={13} class="shrink-0 opacity-60" />
 					{/if}
-					<span class="min-w-0 flex-1 truncate text-xs font-semibold opacity-70">{group.name}</span>
-					<span class="shrink-0 text-xs opacity-50">{group.sessionCount}</span>
+					<span class="min-w-0 truncate text-xs font-semibold opacity-70">{group.name}</span>
+					<span class="badge badge-ghost badge-sm shrink-0">{group.sessionCount}</span>
+					<div class="flex-1"></div>
 				</button>
 				{#if isOpen}
 					<div class="mt-1 space-y-3 pl-3">
 						{#each group.subgroups as g (g.key)}
 							<div>
-								<div class="flex items-center gap-1 px-1">
+								<div class="flex items-center gap-1 pl-1 pr-0">
 									<span class="min-w-0 flex-1 truncate text-xs font-semibold opacity-70" title={g.key}>
 										{g.label}
 									</span>

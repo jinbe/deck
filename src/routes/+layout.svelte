@@ -3,8 +3,14 @@
 	import { Sun, Moon, BookOpen, Download, Bell, BellRing, BellOff, RefreshCw, X } from '@lucide/svelte';
 	import { urlBase64ToUint8Array } from '$lib/push';
 	import { watchForUpdate } from '$lib/pwa-update';
+	import { page } from '$app/state';
 
 	let { children } = $props();
+
+	// The session view (/s/[id]) runs its own full-height, edge-to-edge layout
+	// (sidebar + panel flush under the header); every other route wants the body
+	// padding, so scope it here rather than stripping it from every page.
+	const bodyPadding = $derived(page.url.pathname.startsWith('/s/') ? '' : 'p-3 sm:p-4');
 
 	let updateReady = $state(false);
 	let refreshing = false;
@@ -181,7 +187,7 @@
 		</div>
 	</header>
 
-	<main class="w-full min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
+	<main class="w-full min-h-0 flex-1 overflow-y-auto {bodyPadding}">
 		{@render children()}
 	</main>
 </div>
