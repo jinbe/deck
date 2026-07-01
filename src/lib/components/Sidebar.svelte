@@ -5,8 +5,17 @@
 	import { bucketSessions, type StatusBucketKey } from '$lib/status-groups';
 	import { createCollapseState } from '$lib/collapse.svelte';
 	import { aggregateState, SERVER_DOT, SERVER_LABEL } from '$lib/servers';
-	import { PR_STATE_COLOR } from '$lib/pr';
-	import { Plus, Terminal, Bot, GitBranch, FolderGit2, FolderTree, Activity, Trash2, ChevronRight, ChevronDown } from '@lucide/svelte';
+	import { pickSessionIcon, type SessionIconKind } from '$lib/session-icon';
+	import { Plus, Terminal, Bot, GitBranch, GitPullRequest, GitMerge, Ticket, FolderGit2, FolderTree, Activity, Trash2, ChevronRight, ChevronDown } from '@lucide/svelte';
+
+	// Maps the pure icon-pick (session-icon.ts) onto lucide components: shape says
+	// what the session is attached to, colour still says PR state.
+	const WORKTREE_ICON: Record<SessionIconKind, typeof GitBranch> = {
+		'pull-request': GitPullRequest,
+		merge: GitMerge,
+		issue: Ticket,
+		branch: GitBranch
+	};
 
 	interface Props {
 		projects: Project[];
@@ -105,12 +114,13 @@
 				<span class="size-1.5 shrink-0 rounded-full {SERVER_DOT[st]}" title={`servers: ${SERVER_LABEL[st]}`}></span>
 			{/if}
 			{#if s.worktree}
-				{@const prColor = s.pr?.state ? PR_STATE_COLOR[s.pr.state] : undefined}
-				<GitBranch
+				{@const icon = pickSessionIcon(s)}
+				{@const Icon = WORKTREE_ICON[icon.kind]}
+				<Icon
 					size={11}
-					class="shrink-0 {prColor ? '' : 'opacity-40'}"
-					style={prColor ? `color:${prColor}` : undefined}
-					title={prColor ? `PR ${s.pr?.state}` : undefined}
+					class="shrink-0 {icon.color ? '' : 'opacity-40'}"
+					style={icon.color ? `color:${icon.color}` : undefined}
+					title={icon.title}
 				/>
 			{/if}
 		</a>
