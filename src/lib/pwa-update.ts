@@ -42,15 +42,17 @@ export function watchForUpdate(onReady: () => void): () => void {
 	};
 
 	// Follow one installing worker to readiness. Guarded so a worker is tracked once,
-	// and the listener removes itself once it has reported (or gone redundant).
+	// and the listener removes itself once it has reported or reached a terminal state.
 	const track = (worker: ServiceWorker | null) => {
 		if (!worker || tracked.has(worker)) return;
 		tracked.add(worker);
 		const onStateChange = () => {
-			if (isUpdateReady(worker.state, !!sw.controller)) {
-				worker.removeEventListener('statechange', onStateChange);
-				notifyReady();
-			} else if (worker.state === 'redundant') {
+			const ready = isUpdateReady(worker.state, !!sw.controller);
+			if (ready) notifyReady();
+			// Detach once this worker can no longer become an update for the page: it
+			// reported ready, activated (it's now the controller), or went redundant.
+			// The activated case stops a first-install worker leaking its handler.
+			if (ready || worker.state === 'activated' || worker.state === 'redundant') {
 				worker.removeEventListener('statechange', onStateChange);
 			}
 		};
