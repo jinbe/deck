@@ -41,6 +41,33 @@ describe('expandPlaceholders', () => {
 	it('leaves unknown tokens untouched', () => {
 		expect(expandPlaceholders('[nope]', ctx)).toBe('[nope]');
 	});
+
+	it('substitutes the fetched issue-detail tokens', () => {
+		const text = '[issue_title]\n[issue_body]\n[issue_comments]';
+		expect(
+			expandPlaceholders(text, {
+				issueTitle: 'Fix login',
+				issueBody: 'It breaks.',
+				issueComments: 'me too'
+			})
+		).toBe('Fix login\nIt breaks.\nme too');
+	});
+
+	it('resolves missing issue-detail tokens to empty', () => {
+		expect(expandPlaceholders('[issue_title][issue_body][issue_comments]', {})).toBe('');
+	});
+
+	it('does not re-expand tokens that appear inside a substituted value', () => {
+		// An issue body that literally contains "[pr_url]" / "[title]" must survive
+		// verbatim — the substitution is a single pass, not recursive.
+		expect(
+			expandPlaceholders('[issue_body]', {
+				issueBody: 'reported at [pr_url] for [title]',
+				prUrl: 'https://example.com/pull/1',
+				title: 'X'
+			})
+		).toBe('reported at [pr_url] for [title]');
+	});
 });
 
 describe('contextFromSession', () => {
@@ -65,6 +92,20 @@ describe('contextFromSession', () => {
 			prBranch: 'jin/fix-login',
 			prBase: 'main'
 		});
+	});
+
+	it('joins id/url across multiple attached issues', () => {
+		const session = {
+			title: 'Two tickets',
+			cwd: '/x',
+			issues: [
+				{ source: 'github', id: 'acme/app#1', url: 'https://example.com/1' },
+				{ source: 'github', id: 'acme/app#2', url: 'https://example.com/2' }
+			]
+		} as DeckSession;
+		const ctx = contextFromSession(session);
+		expect(ctx.issueId).toBe('acme/app#1 + acme/app#2');
+		expect(ctx.issueUrl).toBe('https://example.com/1 https://example.com/2');
 	});
 
 	it('leaves fields undefined when no worktree/issue/pr', () => {
