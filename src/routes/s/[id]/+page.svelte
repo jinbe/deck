@@ -178,7 +178,11 @@
 	let dragLeft = 0; // sidebar's left viewport x, captured at drag start
 
 	onMount(() => {
-		sidebarWidth = parseSidebarWidth(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+		try {
+			sidebarWidth = parseSidebarWidth(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+		} catch {
+			// storage disabled/blocked (private mode): keep the default width
+		}
 	});
 
 	function persistWidth() {
@@ -212,7 +216,10 @@
 	}
 
 	function onHandleUp(e: PointerEvent) {
-		(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+		// releasePointerCapture throws if the capture was already lost (endDrag also
+		// runs via onlostpointercapture), so only release when we still hold it.
+		const el = e.currentTarget as HTMLElement;
+		if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
 		endDrag();
 	}
 
