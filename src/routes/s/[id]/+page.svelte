@@ -10,6 +10,7 @@
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import NewSessionModal from '$lib/components/NewSessionModal.svelte';
 	import PrMenu from '$lib/components/PrMenu.svelte';
+	import IssueMenu from '$lib/components/IssueMenu.svelte';
 	import ModelMenu from '$lib/components/ModelMenu.svelte';
 	import { shortPath } from '$lib/time';
 	import { ISSUE_BADGE } from '$lib/issues';
@@ -358,7 +359,8 @@
 			{/if}
 			<div class="flex min-w-0 flex-1 items-baseline gap-2">
 				<span class="truncate font-medium">{session.title}</span>
-				{#each issueChips as issue (issue.source + ':' + issue.id)}
+				{#if issueChips.length === 1}
+					{@const issue = issueChips[0]}
 					{#if issue.url}
 						<a
 							href={issue.url}
@@ -379,7 +381,9 @@
 							<span class="hidden sm:inline">{ISSUE_BADGE[issue.source].label} {issue.id}</span>
 						</span>
 					{/if}
-				{/each}
+				{:else if issueChips.length > 1}
+					<IssueMenu issues={issueChips} />
+				{/if}
 				{#if livePr}
 					<PrMenu id={session.id} pr={livePr} onChange={refresh} />
 				{/if}
