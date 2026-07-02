@@ -31,7 +31,8 @@ if [ -z "$base_url" ] || [ -z "$ntfy_url" ]; then
 	exit 0
 fi
 
-session_url="$base_url/s/$DECK_SESSION_ID"
+# Trim a trailing slash so a base URL copied with one does not build "//s/...".
+session_url="${base_url%/}/s/$DECK_SESSION_ID"
 
 set -- \
 	-fsS -m 10 \

@@ -69,7 +69,7 @@ when a turn ends. Add it to `~/.claude/settings.json` (global) or a project's
 {
   "hooks": {
     "Stop": [
-      { "hooks": [ { "type": "command", "command": "/home/you/.local/bin/deck-notify.sh" } ] }
+      { "hooks": [ { "type": "command", "command": "/path/to/deck-notify.sh" } ] }
     ]
   }
 }
@@ -104,7 +104,7 @@ events, including `agent-turn-complete` when a turn finishes. Add it to
 `~/.codex/config.toml`, again with an absolute path:
 
 ```toml
-notify = ["/home/you/.local/bin/deck-notify.sh"]
+notify = ["/path/to/deck-notify.sh"]
 ```
 
 Codex invokes the program with a single JSON argument describing the event; the
