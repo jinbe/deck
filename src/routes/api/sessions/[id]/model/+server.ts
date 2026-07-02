@@ -45,7 +45,9 @@ function applyModel(session: DeckSession, model: string | undefined) {
 
 export const POST: RequestHandler = async ({ params, request }) => {
 	const session = agentSession(params.id);
-	const body = (await request.json().catch(() => ({}))) as { model?: unknown };
+	// Malformed JSON must 400, not read as "reset to default" (an absent or empty
+	// `model` in a well-formed body is the explicit reset).
+	const body = (await request.json().catch(() => error(400, 'invalid body'))) as { model?: unknown };
 	const model = parseModel(body.model);
 	if (agentTurnRunning(session.id)) error(409, 'a turn is running');
 	// Unchanged is a no-op so re-picking the current model doesn't spam markers.
